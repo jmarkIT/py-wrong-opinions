@@ -7,7 +7,7 @@ Backend API for the "Wrong Opinions" web app - a platform for tracking weekly mo
 ## Tech Stack
 
 ### Required
-- **Python 3.11+** - Runtime
+- **Python 3.13+** - Runtime
 - **UV** - Package management
 - **FastAPI** - Web framework
 - **Pydantic** - Data validation and settings management
