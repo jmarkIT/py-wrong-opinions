@@ -317,6 +317,14 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - [ ] API documentation (FastAPI auto-generates OpenAPI)
 
 ### Phase 8: Future Enhancements (Optional)
+- [ ] **Movie cast & crew data** - Pull and store cast/crew from TMDB (`/movie/{id}/credits`)
+  - [ ] Create `Person`, `MovieCast`, `MovieCrew` models
+  - [ ] Store actor names, roles, profile images
+  - [ ] Store director, writer, composer, etc.
+- [ ] **Album artist details** - Pull full artist info from MusicBrainz
+  - [ ] Create `Artist` model with MusicBrainz artist ID
+  - [ ] Store artist bio, origin, active years
+  - [ ] Link albums to multiple artists (collaborations)
 - [ ] Statistics/analytics endpoints
 - [ ] Export functionality (CSV, JSON)
 - [ ] Multiple users viewing each other's selections
