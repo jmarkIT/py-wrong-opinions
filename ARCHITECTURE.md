@@ -7,7 +7,7 @@ Backend API for the "Wrong Opinions" web app - a platform for tracking weekly mo
 ## Tech Stack
 
 ### Required
-- **Python 3.14** - Runtime
+- **Python 3.11+** - Runtime
 - **UV** - Package management
 - **FastAPI** - Web framework
 - **Pydantic** - Data validation and settings management
@@ -261,12 +261,12 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 ## Implementation Phases
 
 ### Phase 1: Project Setup
-- [ ] Initialize UV project with `pyproject.toml`
-- [ ] Set up project structure (directories, `__init__.py` files)
-- [ ] Configure FastAPI app with basic health check endpoint
-- [ ] Set up Pydantic settings management
-- [ ] Configure Ruff for linting/formatting
-- [ ] Add basic pytest configuration
+- [x] Initialize UV project with `pyproject.toml`
+- [x] Set up project structure (directories, `__init__.py` files)
+- [x] Configure FastAPI app with basic health check endpoint
+- [x] Set up Pydantic settings management
+- [x] Configure Ruff for linting/formatting
+- [x] Add basic pytest configuration
 
 ### Phase 2: Database Foundation
 - [ ] Set up SQLAlchemy with async support
