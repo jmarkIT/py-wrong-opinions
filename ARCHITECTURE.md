@@ -269,7 +269,7 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - [x] Add basic pytest configuration
 
 ### Phase 2: Database Foundation
-- [ ] Set up SQLAlchemy with async support
+- [x] Set up SQLAlchemy with async support
 - [ ] Create all ORM models
 - [ ] Configure Alembic for migrations
 - [ ] Create initial migration
