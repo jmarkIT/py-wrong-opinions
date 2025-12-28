@@ -1,6 +1,6 @@
 """Pydantic schemas for movie API endpoints."""
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -64,3 +64,4 @@ class CachedMovie(BaseModel):
     release_date: date | None = Field(default=None, description="Release date")
     poster_path: str | None = Field(default=None, description="Poster image path")
     overview: str | None = Field(default=None, description="Movie overview/synopsis")
+    cached_at: datetime = Field(description="When the movie data was cached")

@@ -8,15 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from wrong_opinions.database import get_db
+from wrong_opinions.models.movie import Movie
 from wrong_opinions.models.user import User
 from wrong_opinions.models.week import Week, WeekAlbum, WeekMovie
+from wrong_opinions.schemas.movie import CachedMovie
 from wrong_opinions.schemas.week import (
+    AddMovieToWeek,
     WeekCreate,
     WeekListResponse,
+    WeekMovieResponse,
     WeekResponse,
     WeekUpdate,
     WeekWithSelections,
 )
+from wrong_opinions.services.base import APIError, NotFoundError
+from wrong_opinions.services.tmdb import TMDBClient, get_tmdb_client
 
 router = APIRouter(prefix="/weeks", tags=["weeks"])
 
@@ -273,3 +279,132 @@ async def delete_week(
         raise HTTPException(status_code=404, detail="Week not found")
 
     await db.delete(week)
+
+
+@router.post("/{week_id}/movies", response_model=WeekMovieResponse, status_code=201)
+async def add_movie_to_week(
+    week_id: int,
+    movie_data: AddMovieToWeek,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+    tmdb_client: TMDBClient = Depends(get_tmdb_client),
+) -> WeekMovieResponse:
+    """Add a movie to a week selection.
+
+    Fetches the movie from TMDB (or cache) and adds it to the specified position.
+    Position must be 1 or 2, and cannot be already occupied.
+    """
+    # Verify week exists and belongs to user
+    week_query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    week_result = await db.execute(week_query)
+    week = week_result.scalar_one_or_none()
+
+    if not week:
+        raise HTTPException(status_code=404, detail="Week not found")
+
+    # Check if position is already occupied
+    existing_query = select(WeekMovie).where(
+        WeekMovie.week_id == week_id, WeekMovie.position == movie_data.position
+    )
+    existing_result = await db.execute(existing_query)
+    if existing_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail=f"Position {movie_data.position} is already occupied",
+        )
+
+    # Get or fetch movie from cache/TMDB
+    try:
+        movie_query = select(Movie).where(Movie.tmdb_id == movie_data.tmdb_id)
+        movie_result = await db.execute(movie_query)
+        movie = movie_result.scalar_one_or_none()
+
+        if not movie:
+            # Fetch from TMDB and cache
+            tmdb_movie = await tmdb_client.get_movie(movie_data.tmdb_id)
+            movie = Movie(
+                tmdb_id=tmdb_movie.id,
+                title=tmdb_movie.title,
+                original_title=tmdb_movie.original_title,
+                release_date=tmdb_movie.release_date,
+                poster_path=tmdb_movie.poster_path,
+                overview=tmdb_movie.overview,
+                cached_at=datetime.now(UTC),
+            )
+            db.add(movie)
+            await db.flush()
+
+        # Create the week-movie association
+        now = datetime.now(UTC)
+        week_movie = WeekMovie(
+            week_id=week_id,
+            movie_id=movie.id,
+            position=movie_data.position,
+            added_at=now,
+        )
+        db.add(week_movie)
+        await db.flush()
+
+        # Update week's updated_at timestamp
+        week.updated_at = now
+
+        return WeekMovieResponse(
+            week_id=week_id,
+            position=movie_data.position,
+            added_at=now,
+            movie=CachedMovie(
+                id=movie.id,
+                tmdb_id=movie.tmdb_id,
+                title=movie.title,
+                original_title=movie.original_title,
+                release_date=movie.release_date,
+                poster_path=movie.poster_path,
+                overview=movie.overview,
+                cached_at=movie.cached_at,
+            ),
+        )
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail="Movie not found in TMDB") from e
+    except APIError as e:
+        raise HTTPException(status_code=e.status_code or 500, detail=str(e)) from e
+    finally:
+        await tmdb_client.close()
+
+
+@router.delete("/{week_id}/movies/{position}", status_code=204)
+async def remove_movie_from_week(
+    week_id: int,
+    position: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> None:
+    """Remove a movie from a week selection.
+
+    Removes the movie at the specified position (1 or 2) from the week.
+    """
+    # Validate position
+    if position not in (1, 2):
+        raise HTTPException(status_code=400, detail="Position must be 1 or 2")
+
+    # Verify week exists and belongs to user
+    week_query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    week_result = await db.execute(week_query)
+    week = week_result.scalar_one_or_none()
+
+    if not week:
+        raise HTTPException(status_code=404, detail="Week not found")
+
+    # Find and delete the week-movie association
+    week_movie_query = select(WeekMovie).where(
+        WeekMovie.week_id == week_id, WeekMovie.position == position
+    )
+    week_movie_result = await db.execute(week_movie_query)
+    week_movie = week_movie_result.scalar_one_or_none()
+
+    if not week_movie:
+        raise HTTPException(status_code=404, detail=f"No movie found at position {position}")
+
+    await db.delete(week_movie)
+
+    # Update week's updated_at timestamp
+    week.updated_at = datetime.now(UTC)
