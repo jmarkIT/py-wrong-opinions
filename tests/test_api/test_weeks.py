@@ -8,8 +8,10 @@ from httpx import AsyncClient
 
 from wrong_opinions.database import get_db
 from wrong_opinions.main import app
+from wrong_opinions.models.movie import Movie
 from wrong_opinions.models.user import User
-from wrong_opinions.models.week import Week
+from wrong_opinions.models.week import Week, WeekMovie
+from wrong_opinions.services.tmdb import get_tmdb_client
 
 
 @pytest.fixture
@@ -403,5 +405,372 @@ class TestDeleteWeek:
             response = await client.delete("/api/weeks/999")
 
             assert response.status_code == 404
+        finally:
+            app.dependency_overrides.clear()
+
+
+def create_mock_movie(
+    id: int = 1,
+    tmdb_id: int = 550,
+    title: str = "Fight Club",
+    original_title: str | None = None,
+    release_date=None,
+    poster_path: str | None = "/poster.jpg",
+    overview: str | None = "A movie about a club",
+) -> MagicMock:
+    """Create a mock Movie object."""
+    mock_movie = MagicMock(spec=Movie)
+    mock_movie.id = id
+    mock_movie.tmdb_id = tmdb_id
+    mock_movie.title = title
+    mock_movie.original_title = original_title
+    mock_movie.release_date = release_date
+    mock_movie.poster_path = poster_path
+    mock_movie.overview = overview
+    mock_movie.cached_at = datetime(2025, 1, 1, 12, 0, 0)
+    return mock_movie
+
+
+def create_mock_week_movie(
+    week_id: int = 1,
+    movie_id: int = 1,
+    position: int = 1,
+) -> MagicMock:
+    """Create a mock WeekMovie object."""
+    mock_week_movie = MagicMock(spec=WeekMovie)
+    mock_week_movie.id = 1
+    mock_week_movie.week_id = week_id
+    mock_week_movie.movie_id = movie_id
+    mock_week_movie.position = position
+    mock_week_movie.added_at = datetime(2025, 1, 1, 12, 0, 0)
+    return mock_week_movie
+
+
+@pytest.fixture
+def mock_tmdb_client():
+    """Create a mock TMDB client."""
+    mock_client = AsyncMock()
+    mock_client.close = AsyncMock()
+
+    # Create a mock movie response
+    mock_movie_response = MagicMock()
+    mock_movie_response.id = 550
+    mock_movie_response.title = "Fight Club"
+    mock_movie_response.original_title = None
+    mock_movie_response.release_date = None
+    mock_movie_response.poster_path = "/poster.jpg"
+    mock_movie_response.overview = "A movie about a club"
+
+    mock_client.get_movie = AsyncMock(return_value=mock_movie_response)
+    return mock_client
+
+
+class TestAddMovieToWeek:
+    """Tests for add movie to week endpoint."""
+
+    async def test_add_movie_success_from_cache(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+    ) -> None:
+        """Test successfully adding a cached movie to a week."""
+        mock_week = create_mock_week(id=1)
+        mock_movie = create_mock_movie(id=1, tmdb_id=550)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock position check - no existing movie at position
+        position_result = MagicMock()
+        position_result.scalar_one_or_none.return_value = None
+
+        # Mock movie lookup - movie exists in cache
+        movie_result = MagicMock()
+        movie_result.scalar_one_or_none.return_value = mock_movie
+
+        mock_db_session.execute = AsyncMock(
+            side_effect=[week_result, position_result, movie_result]
+        )
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_tmdb_client():
+            return mock_tmdb_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/1/movies",
+                json={"tmdb_id": 550, "position": 1},
+            )
+
+            assert response.status_code == 201
+            data = response.json()
+            assert data["week_id"] == 1
+            assert data["position"] == 1
+            assert data["movie"]["tmdb_id"] == 550
+            assert data["movie"]["title"] == "Fight Club"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_add_movie_success_from_tmdb(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+    ) -> None:
+        """Test successfully adding a movie fetched from TMDB."""
+        mock_week = create_mock_week(id=1)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock position check - no existing movie at position
+        position_result = MagicMock()
+        position_result.scalar_one_or_none.return_value = None
+
+        # Mock movie lookup - movie not in cache
+        movie_result = MagicMock()
+        movie_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(
+            side_effect=[week_result, position_result, movie_result]
+        )
+
+        # Track added movie
+        added_movie = None
+
+        def capture_add(obj):
+            nonlocal added_movie
+            if isinstance(obj, MagicMock):
+                # This is a WeekMovie
+                pass
+            else:
+                added_movie = obj
+
+        mock_db_session.add = MagicMock(side_effect=capture_add)
+
+        async def mock_flush():
+            if added_movie:
+                added_movie.id = 1
+                added_movie.cached_at = datetime(2025, 1, 1, 12, 0, 0)
+
+        mock_db_session.flush = AsyncMock(side_effect=mock_flush)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_tmdb_client():
+            return mock_tmdb_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/1/movies",
+                json={"tmdb_id": 550, "position": 1},
+            )
+
+            assert response.status_code == 201
+            data = response.json()
+            assert data["week_id"] == 1
+            assert data["position"] == 1
+            assert data["movie"]["tmdb_id"] == 550
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_add_movie_week_not_found(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+    ) -> None:
+        """Test adding a movie to a non-existent week."""
+        # Mock week lookup - week not found
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(return_value=week_result)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_tmdb_client():
+            return mock_tmdb_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/999/movies",
+                json={"tmdb_id": 550, "position": 1},
+            )
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "Week not found"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_add_movie_position_occupied(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+    ) -> None:
+        """Test adding a movie to an already occupied position."""
+        mock_week = create_mock_week(id=1)
+        existing_week_movie = create_mock_week_movie(position=1)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock position check - position is occupied
+        position_result = MagicMock()
+        position_result.scalar_one_or_none.return_value = existing_week_movie
+
+        mock_db_session.execute = AsyncMock(side_effect=[week_result, position_result])
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_tmdb_client():
+            return mock_tmdb_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/1/movies",
+                json={"tmdb_id": 550, "position": 1},
+            )
+
+            assert response.status_code == 409
+            assert "already occupied" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_add_movie_invalid_position(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+    ) -> None:
+        """Test adding a movie with invalid position."""
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_tmdb_client():
+            return mock_tmdb_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/1/movies",
+                json={"tmdb_id": 550, "position": 3},
+            )
+
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
+
+
+class TestRemoveMovieFromWeek:
+    """Tests for remove movie from week endpoint."""
+
+    async def test_remove_movie_success(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test successfully removing a movie from a week."""
+        mock_week = create_mock_week(id=1)
+        mock_week_movie = create_mock_week_movie(week_id=1, position=1)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock week_movie lookup
+        week_movie_result = MagicMock()
+        week_movie_result.scalar_one_or_none.return_value = mock_week_movie
+
+        mock_db_session.execute = AsyncMock(side_effect=[week_result, week_movie_result])
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.delete("/api/weeks/1/movies/1")
+
+            assert response.status_code == 204
+            mock_db_session.delete.assert_called_once_with(mock_week_movie)
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_remove_movie_week_not_found(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test removing a movie from a non-existent week."""
+        # Mock week lookup - week not found
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(return_value=week_result)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.delete("/api/weeks/999/movies/1")
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "Week not found"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_remove_movie_not_found(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test removing a movie that doesn't exist at position."""
+        mock_week = create_mock_week(id=1)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock week_movie lookup - not found
+        week_movie_result = MagicMock()
+        week_movie_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(side_effect=[week_result, week_movie_result])
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.delete("/api/weeks/1/movies/1")
+
+            assert response.status_code == 404
+            assert "No movie found at position" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_remove_movie_invalid_position(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test removing a movie with invalid position."""
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.delete("/api/weeks/1/movies/3")
+
+            assert response.status_code == 400
+            assert "Position must be 1 or 2" in response.json()["detail"]
         finally:
             app.dependency_overrides.clear()
