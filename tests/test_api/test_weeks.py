@@ -14,6 +14,7 @@ from wrong_opinions.models.user import User
 from wrong_opinions.models.week import Week, WeekAlbum, WeekMovie
 from wrong_opinions.services.musicbrainz import get_musicbrainz_client
 from wrong_opinions.services.tmdb import get_tmdb_client
+from wrong_opinions.utils.security import get_current_active_user
 
 
 @pytest.fixture
@@ -25,6 +26,18 @@ def mock_db_session():
     mock_session.flush = AsyncMock()
     mock_session.refresh = AsyncMock()
     return mock_session
+
+
+@pytest.fixture
+def mock_current_user():
+    """Create a mock authenticated user."""
+    mock_user = MagicMock(spec=User)
+    mock_user.id = 1
+    mock_user.username = "testuser"
+    mock_user.email = "test@example.com"
+    mock_user.is_active = True
+    mock_user.created_at = datetime(2025, 1, 1, 12, 0, 0)
+    return mock_user
 
 
 def create_mock_week(
@@ -54,18 +67,18 @@ def create_mock_user(id: int = 1) -> MagicMock:
     mock_user.id = id
     mock_user.username = f"user{id}"
     mock_user.email = f"user{id}@example.com"
+    mock_user.is_active = True
+    mock_user.created_at = datetime(2025, 1, 1, 12, 0, 0)
     return mock_user
 
 
 class TestListWeeks:
     """Tests for list weeks endpoint."""
 
-    async def test_list_weeks_empty(self, client: AsyncClient, mock_db_session: AsyncMock) -> None:
+    async def test_list_weeks_empty(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
+    ) -> None:
         """Test listing weeks when none exist."""
-        # Mock user check - user exists
-        user_result = MagicMock()
-        user_result.scalar_one_or_none.return_value = create_mock_user()
-
         # Mock count query
         count_result = MagicMock()
         count_result.scalar_one.return_value = 0
@@ -80,6 +93,7 @@ class TestListWeeks:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/weeks")
@@ -93,7 +107,7 @@ class TestListWeeks:
             app.dependency_overrides.clear()
 
     async def test_list_weeks_with_results(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test listing weeks with results."""
         mock_weeks = [
@@ -115,6 +129,7 @@ class TestListWeeks:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/weeks")
@@ -128,7 +143,7 @@ class TestListWeeks:
             app.dependency_overrides.clear()
 
     async def test_list_weeks_with_year_filter(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test listing weeks filtered by year."""
         mock_weeks = [create_mock_week(id=1, year=2024, week_number=52)]
@@ -147,6 +162,7 @@ class TestListWeeks:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/weeks?year=2024")
@@ -158,23 +174,25 @@ class TestListWeeks:
         finally:
             app.dependency_overrides.clear()
 
+    async def test_list_weeks_unauthenticated(self, client: AsyncClient) -> None:
+        """Test listing weeks without authentication returns 401."""
+        response = await client.get("/api/weeks")
+
+        assert response.status_code == 401
+
 
 class TestCreateWeek:
     """Tests for create week endpoint."""
 
     async def test_create_week_success(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test successful week creation."""
-        # Mock user check
-        user_result = MagicMock()
-        user_result.scalar_one_or_none.return_value = create_mock_user()
-
         # Mock existing week check - no existing week
         existing_result = MagicMock()
         existing_result.scalar_one_or_none.return_value = None
 
-        mock_db_session.execute = AsyncMock(side_effect=[user_result, existing_result])
+        mock_db_session.execute = AsyncMock(return_value=existing_result)
 
         # Mock flush and refresh to set the created week's properties
         async def mock_refresh(week):
@@ -188,6 +206,7 @@ class TestCreateWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -204,23 +223,20 @@ class TestCreateWeek:
             app.dependency_overrides.clear()
 
     async def test_create_week_conflict(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test creating a week that already exists."""
-        # Mock user check
-        user_result = MagicMock()
-        user_result.scalar_one_or_none.return_value = create_mock_user()
-
         # Mock existing week check - week exists
         existing_result = MagicMock()
         existing_result.scalar_one_or_none.return_value = create_mock_week()
 
-        mock_db_session.execute = AsyncMock(side_effect=[user_result, existing_result])
+        mock_db_session.execute = AsyncMock(return_value=existing_result)
 
         async def override_get_db():
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -234,7 +250,7 @@ class TestCreateWeek:
             app.dependency_overrides.clear()
 
     async def test_create_week_invalid_week_number(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test creating a week with invalid week number."""
 
@@ -242,6 +258,7 @@ class TestCreateWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -253,23 +270,28 @@ class TestCreateWeek:
         finally:
             app.dependency_overrides.clear()
 
+    async def test_create_week_unauthenticated(self, client: AsyncClient) -> None:
+        """Test creating a week without authentication returns 401."""
+        response = await client.post(
+            "/api/weeks",
+            json={"year": 2025, "week_number": 1},
+        )
+
+        assert response.status_code == 401
+
 
 class TestGetCurrentWeek:
     """Tests for get current week endpoint."""
 
     async def test_get_current_week_creates_new(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test getting current week when none exists creates a new one."""
-        # Mock user check - user exists
-        user_result = MagicMock()
-        user_result.scalar_one_or_none.return_value = create_mock_user()
-
         # Mock week lookup - no existing week
         week_result = MagicMock()
         week_result.scalar_one_or_none.return_value = None
 
-        mock_db_session.execute = AsyncMock(side_effect=[user_result, week_result])
+        mock_db_session.execute = AsyncMock(return_value=week_result)
 
         # Mock flush and refresh to set the created week's properties
         async def mock_refresh(week):
@@ -283,6 +305,7 @@ class TestGetCurrentWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/weeks/current")
@@ -298,7 +321,7 @@ class TestGetCurrentWeek:
             app.dependency_overrides.clear()
 
     async def test_get_current_week_returns_existing(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test getting current week returns existing week if it exists."""
         # Get current ISO week for mock
@@ -313,20 +336,17 @@ class TestGetCurrentWeek:
             id=1, year=current_year, week_number=current_week, notes="Existing week"
         )
 
-        # Mock user check - user exists
-        user_result = MagicMock()
-        user_result.scalar_one_or_none.return_value = create_mock_user()
-
         # Mock week lookup - week exists
         week_result = MagicMock()
         week_result.scalar_one_or_none.return_value = mock_week
 
-        mock_db_session.execute = AsyncMock(side_effect=[user_result, week_result])
+        mock_db_session.execute = AsyncMock(return_value=week_result)
 
         async def override_get_db():
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/weeks/current")
@@ -340,11 +360,19 @@ class TestGetCurrentWeek:
         finally:
             app.dependency_overrides.clear()
 
+    async def test_get_current_week_unauthenticated(self, client: AsyncClient) -> None:
+        """Test getting current week without authentication returns 401."""
+        response = await client.get("/api/weeks/current")
+
+        assert response.status_code == 401
+
 
 class TestGetWeek:
     """Tests for get week endpoint."""
 
-    async def test_get_week_success(self, client: AsyncClient, mock_db_session: AsyncMock) -> None:
+    async def test_get_week_success(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
+    ) -> None:
         """Test successful week retrieval."""
         mock_week = create_mock_week(id=1, notes="Test notes")
 
@@ -356,6 +384,7 @@ class TestGetWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/weeks/1")
@@ -370,7 +399,7 @@ class TestGetWeek:
             app.dependency_overrides.clear()
 
     async def test_get_week_not_found(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test getting a non-existent week."""
         result = MagicMock()
@@ -381,6 +410,7 @@ class TestGetWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/weeks/999")
@@ -390,12 +420,18 @@ class TestGetWeek:
         finally:
             app.dependency_overrides.clear()
 
+    async def test_get_week_unauthenticated(self, client: AsyncClient) -> None:
+        """Test getting a week without authentication returns 401."""
+        response = await client.get("/api/weeks/1")
+
+        assert response.status_code == 401
+
 
 class TestUpdateWeek:
     """Tests for update week endpoint."""
 
     async def test_update_week_success(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test successful week update."""
         mock_week = create_mock_week(id=1, notes=None)
@@ -414,6 +450,7 @@ class TestUpdateWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.patch(
@@ -428,7 +465,7 @@ class TestUpdateWeek:
             app.dependency_overrides.clear()
 
     async def test_update_week_not_found(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test updating a non-existent week."""
         result = MagicMock()
@@ -439,6 +476,7 @@ class TestUpdateWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.patch(
@@ -450,12 +488,21 @@ class TestUpdateWeek:
         finally:
             app.dependency_overrides.clear()
 
+    async def test_update_week_unauthenticated(self, client: AsyncClient) -> None:
+        """Test updating a week without authentication returns 401."""
+        response = await client.patch(
+            "/api/weeks/1",
+            json={"notes": "New notes"},
+        )
+
+        assert response.status_code == 401
+
 
 class TestDeleteWeek:
     """Tests for delete week endpoint."""
 
     async def test_delete_week_success(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test successful week deletion."""
         mock_week = create_mock_week(id=1)
@@ -468,6 +515,7 @@ class TestDeleteWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/1")
@@ -478,7 +526,7 @@ class TestDeleteWeek:
             app.dependency_overrides.clear()
 
     async def test_delete_week_not_found(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test deleting a non-existent week."""
         result = MagicMock()
@@ -489,6 +537,7 @@ class TestDeleteWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/999")
@@ -496,6 +545,12 @@ class TestDeleteWeek:
             assert response.status_code == 404
         finally:
             app.dependency_overrides.clear()
+
+    async def test_delete_week_unauthenticated(self, client: AsyncClient) -> None:
+        """Test deleting a week without authentication returns 401."""
+        response = await client.delete("/api/weeks/1")
+
+        assert response.status_code == 401
 
 
 def create_mock_movie(
@@ -558,7 +613,11 @@ class TestAddMovieToWeek:
     """Tests for add movie to week endpoint."""
 
     async def test_add_movie_success_from_cache(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_tmdb_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test successfully adding a cached movie to a week."""
         mock_week = create_mock_week(id=1)
@@ -588,6 +647,7 @@ class TestAddMovieToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -605,7 +665,11 @@ class TestAddMovieToWeek:
             app.dependency_overrides.clear()
 
     async def test_add_movie_success_from_tmdb(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_tmdb_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test successfully adding a movie fetched from TMDB."""
         mock_week = create_mock_week(id=1)
@@ -654,6 +718,7 @@ class TestAddMovieToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -670,7 +735,11 @@ class TestAddMovieToWeek:
             app.dependency_overrides.clear()
 
     async def test_add_movie_week_not_found(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_tmdb_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test adding a movie to a non-existent week."""
         # Mock week lookup - week not found
@@ -687,6 +756,7 @@ class TestAddMovieToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -700,7 +770,11 @@ class TestAddMovieToWeek:
             app.dependency_overrides.clear()
 
     async def test_add_movie_position_occupied(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_tmdb_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test adding a movie to an already occupied position."""
         mock_week = create_mock_week(id=1)
@@ -724,6 +798,7 @@ class TestAddMovieToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -737,7 +812,11 @@ class TestAddMovieToWeek:
             app.dependency_overrides.clear()
 
     async def test_add_movie_invalid_position(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_tmdb_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_tmdb_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test adding a movie with invalid position."""
 
@@ -749,6 +828,7 @@ class TestAddMovieToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_tmdb_client] = override_get_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -760,12 +840,21 @@ class TestAddMovieToWeek:
         finally:
             app.dependency_overrides.clear()
 
+    async def test_add_movie_unauthenticated(self, client: AsyncClient) -> None:
+        """Test adding a movie without authentication returns 401."""
+        response = await client.post(
+            "/api/weeks/1/movies",
+            json={"tmdb_id": 550, "position": 1},
+        )
+
+        assert response.status_code == 401
+
 
 class TestRemoveMovieFromWeek:
     """Tests for remove movie from week endpoint."""
 
     async def test_remove_movie_success(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test successfully removing a movie from a week."""
         mock_week = create_mock_week(id=1)
@@ -785,6 +874,7 @@ class TestRemoveMovieFromWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/1/movies/1")
@@ -795,7 +885,7 @@ class TestRemoveMovieFromWeek:
             app.dependency_overrides.clear()
 
     async def test_remove_movie_week_not_found(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test removing a movie from a non-existent week."""
         # Mock week lookup - week not found
@@ -808,6 +898,7 @@ class TestRemoveMovieFromWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/999/movies/1")
@@ -818,7 +909,7 @@ class TestRemoveMovieFromWeek:
             app.dependency_overrides.clear()
 
     async def test_remove_movie_not_found(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test removing a movie that doesn't exist at position."""
         mock_week = create_mock_week(id=1)
@@ -837,6 +928,7 @@ class TestRemoveMovieFromWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/1/movies/1")
@@ -847,7 +939,7 @@ class TestRemoveMovieFromWeek:
             app.dependency_overrides.clear()
 
     async def test_remove_movie_invalid_position(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test removing a movie with invalid position."""
 
@@ -855,6 +947,7 @@ class TestRemoveMovieFromWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/1/movies/3")
@@ -863,6 +956,12 @@ class TestRemoveMovieFromWeek:
             assert "Position must be 1 or 2" in response.json()["detail"]
         finally:
             app.dependency_overrides.clear()
+
+    async def test_remove_movie_unauthenticated(self, client: AsyncClient) -> None:
+        """Test removing a movie without authentication returns 401."""
+        response = await client.delete("/api/weeks/1/movies/1")
+
+        assert response.status_code == 401
 
 
 def create_mock_album(
@@ -925,7 +1024,11 @@ class TestAddAlbumToWeek:
     """Tests for add album to week endpoint."""
 
     async def test_add_album_success_from_cache(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_musicbrainz_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test successfully adding a cached album to a week."""
         mock_week = create_mock_week(id=1)
@@ -955,6 +1058,7 @@ class TestAddAlbumToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -972,7 +1076,11 @@ class TestAddAlbumToWeek:
             app.dependency_overrides.clear()
 
     async def test_add_album_success_from_musicbrainz(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_musicbrainz_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test successfully adding an album fetched from MusicBrainz."""
         mock_week = create_mock_week(id=1)
@@ -1021,6 +1129,7 @@ class TestAddAlbumToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -1037,7 +1146,11 @@ class TestAddAlbumToWeek:
             app.dependency_overrides.clear()
 
     async def test_add_album_week_not_found(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_musicbrainz_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test adding an album to a non-existent week."""
         # Mock week lookup - week not found
@@ -1054,6 +1167,7 @@ class TestAddAlbumToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -1067,7 +1181,11 @@ class TestAddAlbumToWeek:
             app.dependency_overrides.clear()
 
     async def test_add_album_position_occupied(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_musicbrainz_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test adding an album to an already occupied position."""
         mock_week = create_mock_week(id=1)
@@ -1091,6 +1209,7 @@ class TestAddAlbumToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -1104,7 +1223,11 @@ class TestAddAlbumToWeek:
             app.dependency_overrides.clear()
 
     async def test_add_album_invalid_position(
-        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_musicbrainz_client: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test adding an album with invalid position."""
 
@@ -1116,6 +1239,7 @@ class TestAddAlbumToWeek:
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.post(
@@ -1127,12 +1251,21 @@ class TestAddAlbumToWeek:
         finally:
             app.dependency_overrides.clear()
 
+    async def test_add_album_unauthenticated(self, client: AsyncClient) -> None:
+        """Test adding an album without authentication returns 401."""
+        response = await client.post(
+            "/api/weeks/1/albums",
+            json={"musicbrainz_id": "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f", "position": 1},
+        )
+
+        assert response.status_code == 401
+
 
 class TestRemoveAlbumFromWeek:
     """Tests for remove album from week endpoint."""
 
     async def test_remove_album_success(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test successfully removing an album from a week."""
         mock_week = create_mock_week(id=1)
@@ -1152,6 +1285,7 @@ class TestRemoveAlbumFromWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/1/albums/1")
@@ -1162,7 +1296,7 @@ class TestRemoveAlbumFromWeek:
             app.dependency_overrides.clear()
 
     async def test_remove_album_week_not_found(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test removing an album from a non-existent week."""
         # Mock week lookup - week not found
@@ -1175,6 +1309,7 @@ class TestRemoveAlbumFromWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/999/albums/1")
@@ -1185,7 +1320,7 @@ class TestRemoveAlbumFromWeek:
             app.dependency_overrides.clear()
 
     async def test_remove_album_not_found(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test removing an album that doesn't exist at position."""
         mock_week = create_mock_week(id=1)
@@ -1204,6 +1339,7 @@ class TestRemoveAlbumFromWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/1/albums/1")
@@ -1214,7 +1350,7 @@ class TestRemoveAlbumFromWeek:
             app.dependency_overrides.clear()
 
     async def test_remove_album_invalid_position(
-        self, client: AsyncClient, mock_db_session: AsyncMock
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test removing an album with invalid position."""
 
@@ -1222,6 +1358,7 @@ class TestRemoveAlbumFromWeek:
             yield mock_db_session
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.delete("/api/weeks/1/albums/3")
@@ -1230,3 +1367,9 @@ class TestRemoveAlbumFromWeek:
             assert "Position must be 1 or 2" in response.json()["detail"]
         finally:
             app.dependency_overrides.clear()
+
+    async def test_remove_album_unauthenticated(self, client: AsyncClient) -> None:
+        """Test removing an album without authentication returns 401."""
+        response = await client.delete("/api/weeks/1/albums/1")
+
+        assert response.status_code == 401
