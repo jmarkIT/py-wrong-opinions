@@ -21,6 +21,20 @@ from wrong_opinions.schemas.movie import (
     MovieSearchResponse,
     MovieSearchResult,
 )
+from wrong_opinions.schemas.week import (
+    AddAlbumToWeek,
+    AddMovieToWeek,
+    WeekAlbumResponse,
+    WeekAlbumSelection,
+    WeekBase,
+    WeekCreate,
+    WeekListResponse,
+    WeekMovieResponse,
+    WeekMovieSelection,
+    WeekResponse,
+    WeekUpdate,
+    WeekWithSelections,
+)
 
 __all__ = [
     # External API schemas
@@ -41,4 +55,17 @@ __all__ = [
     "AlbumSearchResponse",
     "AlbumDetails",
     "CachedAlbum",
+    # Week schemas
+    "WeekBase",
+    "WeekCreate",
+    "WeekUpdate",
+    "WeekResponse",
+    "WeekWithSelections",
+    "WeekListResponse",
+    "WeekMovieSelection",
+    "WeekAlbumSelection",
+    "AddMovieToWeek",
+    "AddAlbumToWeek",
+    "WeekMovieResponse",
+    "WeekAlbumResponse",
 ]

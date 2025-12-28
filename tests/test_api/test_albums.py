@@ -20,38 +20,44 @@ SAMPLE_SEARCH_RESPONSE = MusicBrainzSearchResponse(
     count=2,
     offset=0,
     releases=[
-        MusicBrainzReleaseResult.model_validate({
-            "id": "abc-123-uuid",
-            "title": "The Dark Side of the Moon",
-            "score": 100,
-            "country": "GB",
-            "status": "Official",
-            "date": "1973-03-01",
-            "barcode": "077774644426",
-            "artist-credit": [{"name": "Pink Floyd"}],
-        }),
-        MusicBrainzReleaseResult.model_validate({
-            "id": "def-456-uuid",
-            "title": "The Dark Side of the Moon (Remaster)",
-            "score": 95,
-            "country": "US",
-            "status": "Official",
-            "date": "2011-09-27",
-            "barcode": None,
-            "artist-credit": [{"name": "Pink Floyd"}],
-        }),
+        MusicBrainzReleaseResult.model_validate(
+            {
+                "id": "abc-123-uuid",
+                "title": "The Dark Side of the Moon",
+                "score": 100,
+                "country": "GB",
+                "status": "Official",
+                "date": "1973-03-01",
+                "barcode": "077774644426",
+                "artist-credit": [{"name": "Pink Floyd"}],
+            }
+        ),
+        MusicBrainzReleaseResult.model_validate(
+            {
+                "id": "def-456-uuid",
+                "title": "The Dark Side of the Moon (Remaster)",
+                "score": 95,
+                "country": "US",
+                "status": "Official",
+                "date": "2011-09-27",
+                "barcode": None,
+                "artist-credit": [{"name": "Pink Floyd"}],
+            }
+        ),
     ],
 )
 
-SAMPLE_RELEASE_DETAILS = MusicBrainzReleaseDetails.model_validate({
-    "id": "abc-123-uuid",
-    "title": "The Dark Side of the Moon",
-    "status": "Official",
-    "country": "GB",
-    "date": "1973-03-01",
-    "barcode": "077774644426",
-    "artist-credit": [{"name": "Pink Floyd"}],
-})
+SAMPLE_RELEASE_DETAILS = MusicBrainzReleaseDetails.model_validate(
+    {
+        "id": "abc-123-uuid",
+        "title": "The Dark Side of the Moon",
+        "status": "Official",
+        "country": "GB",
+        "date": "1973-03-01",
+        "barcode": "077774644426",
+        "artist-credit": [{"name": "Pink Floyd"}],
+    }
+)
 
 
 @pytest.fixture
