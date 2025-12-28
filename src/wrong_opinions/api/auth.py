@@ -3,13 +3,17 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from wrong_opinions.database import get_db
 from wrong_opinions.models.user import User
-from wrong_opinions.schemas.user import UserCreate, UserResponse
-from wrong_opinions.utils.security import hash_password
+from wrong_opinions.schemas.user import Token, UserCreate, UserLogin, UserResponse
+from wrong_opinions.utils.security import (
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -64,3 +68,45 @@ async def register(
         is_active=new_user.is_active,
         created_at=new_user.created_at,
     )
+
+
+@router.post("/login", response_model=Token)
+async def login(
+    credentials: UserLogin,
+    db: AsyncSession = Depends(get_db),
+) -> Token:
+    """Authenticate user and return JWT token.
+
+    Accepts either username or email in the username field.
+
+    Raises:
+        HTTPException 401: If credentials are invalid
+        HTTPException 403: If user account is inactive
+    """
+    # Look up user by username or email
+    query = select(User).where(
+        or_(
+            User.username == credentials.username.lower(),
+            User.email == credentials.username.lower(),
+        )
+    )
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+
+    # Validate user exists and password is correct
+    if not user or not verify_password(credentials.password, user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username or password",
+        )
+
+    # Check if user is active
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="User account is inactive",
+        )
+
+    # Create and return access token
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return Token(access_token=access_token, token_type="bearer")

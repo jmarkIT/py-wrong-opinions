@@ -40,3 +40,24 @@ class UserResponse(BaseModel):
     email: str = Field(description="Email address")
     is_active: bool = Field(description="Whether the user account is active")
     created_at: datetime = Field(description="When the user was created")
+
+
+class UserLogin(BaseModel):
+    """Schema for user login request."""
+
+    username: str = Field(description="Username or email")
+    password: str = Field(description="Password")
+
+
+class Token(BaseModel):
+    """Schema for JWT token response."""
+
+    access_token: str = Field(description="JWT access token")
+    token_type: str = Field(default="bearer", description="Token type")
+
+
+class TokenPayload(BaseModel):
+    """Schema for decoded JWT token payload."""
+
+    sub: str = Field(description="Subject (user ID as string)")
+    exp: datetime = Field(description="Expiration timestamp")
