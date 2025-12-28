@@ -8,12 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from wrong_opinions.database import get_db
+from wrong_opinions.models.album import Album
 from wrong_opinions.models.movie import Movie
 from wrong_opinions.models.user import User
 from wrong_opinions.models.week import Week, WeekAlbum, WeekMovie
+from wrong_opinions.schemas.album import CachedAlbum
 from wrong_opinions.schemas.movie import CachedMovie
 from wrong_opinions.schemas.week import (
+    AddAlbumToWeek,
     AddMovieToWeek,
+    WeekAlbumResponse,
     WeekCreate,
     WeekListResponse,
     WeekMovieResponse,
@@ -22,6 +26,7 @@ from wrong_opinions.schemas.week import (
     WeekWithSelections,
 )
 from wrong_opinions.services.base import APIError, NotFoundError
+from wrong_opinions.services.musicbrainz import MusicBrainzClient, get_musicbrainz_client
 from wrong_opinions.services.tmdb import TMDBClient, get_tmdb_client
 
 router = APIRouter(prefix="/weeks", tags=["weeks"])
@@ -405,6 +410,164 @@ async def remove_movie_from_week(
         raise HTTPException(status_code=404, detail=f"No movie found at position {position}")
 
     await db.delete(week_movie)
+
+    # Update week's updated_at timestamp
+    week.updated_at = datetime.now(UTC)
+
+
+@router.post("/{week_id}/albums", response_model=WeekAlbumResponse, status_code=201)
+async def add_album_to_week(
+    week_id: int,
+    album_data: AddAlbumToWeek,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+    musicbrainz_client: MusicBrainzClient = Depends(get_musicbrainz_client),
+) -> WeekAlbumResponse:
+    """Add an album to a week selection.
+
+    Fetches the album from MusicBrainz (or cache) and adds it to the specified position.
+    Position must be 1 or 2, and cannot be already occupied.
+    """
+    # Verify week exists and belongs to user
+    week_query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    week_result = await db.execute(week_query)
+    week = week_result.scalar_one_or_none()
+
+    if not week:
+        raise HTTPException(status_code=404, detail="Week not found")
+
+    # Check if position is already occupied
+    existing_query = select(WeekAlbum).where(
+        WeekAlbum.week_id == week_id, WeekAlbum.position == album_data.position
+    )
+    existing_result = await db.execute(existing_query)
+    if existing_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail=f"Position {album_data.position} is already occupied",
+        )
+
+    # Get or fetch album from cache/MusicBrainz
+    try:
+        album_query = select(Album).where(Album.musicbrainz_id == album_data.musicbrainz_id)
+        album_result = await db.execute(album_query)
+        album = album_result.scalar_one_or_none()
+
+        if not album:
+            # Fetch from MusicBrainz and cache
+            mb_release = await musicbrainz_client.get_release(album_data.musicbrainz_id)
+
+            # Get artist name from the release
+            artist_name = "Unknown Artist"
+            if mb_release.artist_credit:
+                artist_name = mb_release.artist_credit
+
+            # Parse release date if available
+            release_date = None
+            if mb_release.date:
+                try:
+                    # MusicBrainz dates can be YYYY, YYYY-MM, or YYYY-MM-DD
+                    date_str = mb_release.date
+                    if len(date_str) == 4:  # YYYY
+                        from datetime import date as date_type
+
+                        release_date = date_type(int(date_str), 1, 1)
+                    elif len(date_str) == 7:  # YYYY-MM
+                        from datetime import date as date_type
+
+                        parts = date_str.split("-")
+                        release_date = date_type(int(parts[0]), int(parts[1]), 1)
+                    elif len(date_str) == 10:  # YYYY-MM-DD
+                        from datetime import date as date_type
+
+                        parts = date_str.split("-")
+                        release_date = date_type(int(parts[0]), int(parts[1]), int(parts[2]))
+                except (ValueError, IndexError):
+                    pass  # Keep release_date as None if parsing fails
+
+            # Get cover art URL
+            cover_art_url = musicbrainz_client.get_cover_art_front_url(album_data.musicbrainz_id)
+
+            album = Album(
+                musicbrainz_id=mb_release.id,
+                title=mb_release.title,
+                artist=artist_name,
+                release_date=release_date,
+                cover_art_url=cover_art_url,
+                cached_at=datetime.now(UTC),
+            )
+            db.add(album)
+            await db.flush()
+
+        # Create the week-album association
+        now = datetime.now(UTC)
+        week_album = WeekAlbum(
+            week_id=week_id,
+            album_id=album.id,
+            position=album_data.position,
+            added_at=now,
+        )
+        db.add(week_album)
+        await db.flush()
+
+        # Update week's updated_at timestamp
+        week.updated_at = now
+
+        return WeekAlbumResponse(
+            week_id=week_id,
+            position=album_data.position,
+            added_at=now,
+            album=CachedAlbum(
+                id=album.id,
+                musicbrainz_id=album.musicbrainz_id,
+                title=album.title,
+                artist=album.artist,
+                release_date=album.release_date,
+                cover_art_url=album.cover_art_url,
+            ),
+        )
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail="Album not found in MusicBrainz") from e
+    except APIError as e:
+        raise HTTPException(status_code=e.status_code or 500, detail=str(e)) from e
+    finally:
+        await musicbrainz_client.close()
+
+
+@router.delete("/{week_id}/albums/{position}", status_code=204)
+async def remove_album_from_week(
+    week_id: int,
+    position: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> None:
+    """Remove an album from a week selection.
+
+    Removes the album at the specified position (1 or 2) from the week.
+    """
+    # Validate position
+    if position not in (1, 2):
+        raise HTTPException(status_code=400, detail="Position must be 1 or 2")
+
+    # Verify week exists and belongs to user
+    week_query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    week_result = await db.execute(week_query)
+    week = week_result.scalar_one_or_none()
+
+    if not week:
+        raise HTTPException(status_code=404, detail="Week not found")
+
+    # Find and delete the week-album association
+    week_album_query = select(WeekAlbum).where(
+        WeekAlbum.week_id == week_id, WeekAlbum.position == position
+    )
+    week_album_result = await db.execute(week_album_query)
+    week_album = week_album_result.scalar_one_or_none()
+
+    if not week_album:
+        raise HTTPException(status_code=404, detail=f"No album found at position {position}")
+
+    await db.delete(week_album)
 
     # Update week's updated_at timestamp
     week.updated_at = datetime.now(UTC)

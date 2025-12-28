@@ -15,7 +15,7 @@ This document provides comprehensive guidance for AI assistants working on the W
 - Phase 2: Database foundation with async SQLAlchemy - **COMPLETE**
 - Phase 3: External API clients (TMDB, MusicBrainz) - **COMPLETE**
 - Phase 4: Core API - Movies & Albums endpoints - **COMPLETE**
-- Phase 5: Week Selections - **IN PROGRESS** (Steps 1-3 complete)
+- Phase 5: Week Selections - **IN PROGRESS** (Steps 1-4 complete)
 
 **Target Users**: 2 users (small-scale personal project)
 
@@ -194,6 +194,7 @@ uv add --dev <package-name>      # Dev dependency
   - `/api/albums/{musicbrainz_id}` - Get album details (cached)
   - `/api/weeks` - CRUD operations for week selections
   - `/api/weeks/{week_id}/movies` - Add/remove movies to weeks
+  - `/api/weeks/{week_id}/albums` - Add/remove albums to weeks
 
 ### External API Clients
 - Service classes in `src/wrong_opinions/services/`
@@ -513,7 +514,7 @@ uv run fastapi dev src/wrong_opinions/main.py
 | `src/wrong_opinions/config.py` | Settings management | Pydantic Settings, cached with `@lru_cache` |
 | `src/wrong_opinions/database.py` | Database setup | Async engine, session factory, `get_db` dependency |
 | `src/wrong_opinions/api/router.py` | API router aggregation | Combines movies, albums, weeks routers |
-| `src/wrong_opinions/api/weeks.py` | Week endpoints | CRUD + add/remove movie to week |
+| `src/wrong_opinions/api/weeks.py` | Week endpoints | CRUD + add/remove movie/album to week |
 | `src/wrong_opinions/services/tmdb.py` | TMDB client | Movie search, details, image URLs |
 | `src/wrong_opinions/services/musicbrainz.py` | MusicBrainz client | Album search, details, rate limiting |
 | `src/wrong_opinions/models/` | ORM models | User, Week, Movie, Album, WeekMovie, WeekAlbum |
@@ -545,9 +546,9 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ Caching layer for external API responses
 - ✅ Week CRUD endpoints
 - ✅ Add/remove movie to week endpoints
+- ✅ Add/remove album to week endpoints
 
 ### In Progress (Phase 5)
-- 🔄 Add/remove album to week endpoints
 - 🔄 Week validation (1-2 movies, 1-2 albums)
 - 🔄 "Current week" helper endpoint
 
