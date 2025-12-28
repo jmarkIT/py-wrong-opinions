@@ -296,7 +296,7 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 
 ### Phase 5: Week Selections
 - [x] **Step 1:** Create week-related Pydantic schemas
-- [ ] **Step 2:** Implement CRUD endpoints for weeks
+- [x] **Step 2:** Implement CRUD endpoints for weeks
 - [ ] **Step 3:** Implement add/remove movie to week
 - [ ] **Step 4:** Implement add/remove album to week
 - [ ] **Step 5:** Add validation (1-2 movies, 1-2 albums per week)
