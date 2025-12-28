@@ -298,9 +298,9 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - [x] **Step 1:** Create week-related Pydantic schemas
 - [x] **Step 2:** Implement CRUD endpoints for weeks
 - [x] **Step 3:** Implement add/remove movie to week
-- [ ] **Step 4:** Implement add/remove album to week
-- [ ] **Step 5:** Add validation (1-2 movies, 1-2 albums per week)
-- [ ] **Step 6:** Implement "current week" helper endpoint
+- [x] **Step 4:** Implement add/remove album to week
+- [x] **Step 5:** Add validation (1-2 movies, 1-2 albums per week)
+- [x] **Step 6:** Implement "current week" helper endpoint
 
 ### Phase 6: Authentication
 - [ ] **Step 1:** Implement user registration

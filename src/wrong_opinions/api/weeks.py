@@ -210,6 +210,62 @@ async def create_week(
     return week_to_response(new_week)
 
 
+@router.get("/current", response_model=WeekWithSelections)
+async def get_current_week(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> WeekWithSelections:
+    """Get or create the current week selection.
+
+    Returns the week selection for the current ISO week. If no selection
+    exists for the current week, one is automatically created.
+    """
+    # Ensure user exists (for development without auth)
+    await ensure_user_exists(db, user_id)
+
+    # Get current ISO week
+    now = datetime.now(UTC)
+    iso_calendar = now.isocalendar()
+    current_year = iso_calendar[0]
+    current_week = iso_calendar[1]
+
+    # Try to find existing week
+    query = (
+        select(Week)
+        .where(
+            Week.user_id == user_id,
+            Week.year == current_year,
+            Week.week_number == current_week,
+        )
+        .options(
+            selectinload(Week.week_movies).selectinload(WeekMovie.movie),
+            selectinload(Week.week_albums).selectinload(WeekAlbum.album),
+        )
+    )
+    result = await db.execute(query)
+    week = result.scalar_one_or_none()
+
+    if not week:
+        # Create new week for current period
+        week = Week(
+            user_id=user_id,
+            year=current_year,
+            week_number=current_week,
+            notes=None,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(week)
+        await db.flush()
+        await db.refresh(week)
+
+        # Initialize empty relationship lists for the response
+        week.week_movies = []
+        week.week_albums = []
+
+    return week_to_response_with_selections(week)
+
+
 @router.get("/{week_id}", response_model=WeekWithSelections)
 async def get_week(
     week_id: int,

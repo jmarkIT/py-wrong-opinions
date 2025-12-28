@@ -254,6 +254,93 @@ class TestCreateWeek:
             app.dependency_overrides.clear()
 
 
+class TestGetCurrentWeek:
+    """Tests for get current week endpoint."""
+
+    async def test_get_current_week_creates_new(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test getting current week when none exists creates a new one."""
+        # Mock user check - user exists
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = create_mock_user()
+
+        # Mock week lookup - no existing week
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(side_effect=[user_result, week_result])
+
+        # Mock flush and refresh to set the created week's properties
+        async def mock_refresh(week):
+            week.id = 1
+            week.created_at = datetime(2025, 1, 1, 12, 0, 0)
+            week.updated_at = datetime(2025, 1, 1, 12, 0, 0)
+
+        mock_db_session.refresh = mock_refresh
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.get("/api/weeks/current")
+
+            assert response.status_code == 200
+            data = response.json()
+            # Should have current year and week
+            assert "year" in data
+            assert "week_number" in data
+            assert data["movies"] == []
+            assert data["albums"] == []
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_current_week_returns_existing(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test getting current week returns existing week if it exists."""
+        # Get current ISO week for mock
+        from datetime import UTC
+
+        now = datetime.now(UTC)
+        iso_cal = now.isocalendar()
+        current_year = iso_cal[0]
+        current_week = iso_cal[1]
+
+        mock_week = create_mock_week(
+            id=1, year=current_year, week_number=current_week, notes="Existing week"
+        )
+
+        # Mock user check - user exists
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = create_mock_user()
+
+        # Mock week lookup - week exists
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        mock_db_session.execute = AsyncMock(side_effect=[user_result, week_result])
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.get("/api/weeks/current")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["id"] == 1
+            assert data["year"] == current_year
+            assert data["week_number"] == current_week
+            assert data["notes"] == "Existing week"
+        finally:
+            app.dependency_overrides.clear()
+
+
 class TestGetWeek:
     """Tests for get week endpoint."""
 
