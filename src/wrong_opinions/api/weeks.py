@@ -10,7 +10,6 @@ from sqlalchemy.orm import selectinload
 from wrong_opinions.database import get_db
 from wrong_opinions.models.album import Album
 from wrong_opinions.models.movie import Movie
-from wrong_opinions.models.user import User
 from wrong_opinions.models.week import Week, WeekAlbum, WeekMovie
 from wrong_opinions.schemas.album import CachedAlbum
 from wrong_opinions.schemas.movie import CachedMovie
@@ -28,34 +27,9 @@ from wrong_opinions.schemas.week import (
 from wrong_opinions.services.base import APIError, NotFoundError
 from wrong_opinions.services.musicbrainz import MusicBrainzClient, get_musicbrainz_client
 from wrong_opinions.services.tmdb import TMDBClient, get_tmdb_client
+from wrong_opinions.utils.security import CurrentUser
 
 router = APIRouter(prefix="/weeks", tags=["weeks"])
-
-# Temporary: Until authentication is implemented (Phase 6),
-# we use a default user_id. This should be replaced with
-# proper auth dependency.
-DEFAULT_USER_ID = 1
-
-
-async def get_current_user_id() -> int:
-    """Get current user ID. Placeholder until auth is implemented."""
-    return DEFAULT_USER_ID
-
-
-async def ensure_user_exists(db: AsyncSession, user_id: int) -> None:
-    """Ensure a user exists, creating a placeholder if needed for development."""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        # Create placeholder user for development
-        placeholder_user = User(
-            id=user_id,
-            username=f"user{user_id}",
-            email=f"user{user_id}@example.com",
-            hashed_password="placeholder",
-        )
-        db.add(placeholder_user)
-        await db.flush()
 
 
 def week_to_response(week: Week) -> WeekResponse:
@@ -127,18 +101,19 @@ def week_to_response_with_selections(week: Week) -> WeekWithSelections:
 
 @router.get("", response_model=WeekListResponse)
 async def list_weeks(
+    current_user: CurrentUser,
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     year: int | None = Query(None, ge=1900, le=2100, description="Filter by year"),
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
 ) -> WeekListResponse:
     """List all weeks for the current user.
 
     Returns a paginated list of week selections, optionally filtered by year.
+    Requires authentication.
     """
     # Build base query
-    base_query = select(Week).where(Week.user_id == user_id)
+    base_query = select(Week).where(Week.user_id == current_user.id)
 
     if year is not None:
         base_query = base_query.where(Week.year == year)
@@ -168,21 +143,19 @@ async def list_weeks(
 
 @router.post("", response_model=WeekResponse, status_code=201)
 async def create_week(
+    current_user: CurrentUser,
     week_data: WeekCreate,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
 ) -> WeekResponse:
     """Create a new week selection.
 
     Creates a new week for the current user. A user can only have one
     selection per ISO week (year + week_number combination).
+    Requires authentication.
     """
-    # Ensure user exists (for development without auth)
-    await ensure_user_exists(db, user_id)
-
     # Check if week already exists for this user
     existing_query = select(Week).where(
-        Week.user_id == user_id,
+        Week.user_id == current_user.id,
         Week.year == week_data.year,
         Week.week_number == week_data.week_number,
     )
@@ -196,7 +169,7 @@ async def create_week(
     # Create new week
     now = datetime.now(UTC)
     new_week = Week(
-        user_id=user_id,
+        user_id=current_user.id,
         year=week_data.year,
         week_number=week_data.week_number,
         notes=week_data.notes,
@@ -212,17 +185,15 @@ async def create_week(
 
 @router.get("/current", response_model=WeekWithSelections)
 async def get_current_week(
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
 ) -> WeekWithSelections:
     """Get or create the current week selection.
 
     Returns the week selection for the current ISO week. If no selection
     exists for the current week, one is automatically created.
+    Requires authentication.
     """
-    # Ensure user exists (for development without auth)
-    await ensure_user_exists(db, user_id)
-
     # Get current ISO week
     now = datetime.now(UTC)
     iso_calendar = now.isocalendar()
@@ -233,7 +204,7 @@ async def get_current_week(
     query = (
         select(Week)
         .where(
-            Week.user_id == user_id,
+            Week.user_id == current_user.id,
             Week.year == current_year,
             Week.week_number == current_week,
         )
@@ -248,7 +219,7 @@ async def get_current_week(
     if not week:
         # Create new week for current period
         week = Week(
-            user_id=user_id,
+            user_id=current_user.id,
             year=current_year,
             week_number=current_week,
             notes=None,
@@ -269,16 +240,17 @@ async def get_current_week(
 @router.get("/{week_id}", response_model=WeekWithSelections)
 async def get_week(
     week_id: int,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
 ) -> WeekWithSelections:
     """Get a week with its movie and album selections.
 
     Returns the week details including all associated movies and albums.
+    Requires authentication.
     """
     query = (
         select(Week)
-        .where(Week.id == week_id, Week.user_id == user_id)
+        .where(Week.id == week_id, Week.user_id == current_user.id)
         .options(
             selectinload(Week.week_movies).selectinload(WeekMovie.movie),
             selectinload(Week.week_albums).selectinload(WeekAlbum.album),
@@ -296,15 +268,16 @@ async def get_week(
 @router.patch("/{week_id}", response_model=WeekResponse)
 async def update_week(
     week_id: int,
+    current_user: CurrentUser,
     week_data: WeekUpdate,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
 ) -> WeekResponse:
     """Update a week selection.
 
     Currently only supports updating the notes field.
+    Requires authentication.
     """
-    query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
     result = await db.execute(query)
     week = result.scalar_one_or_none()
 
@@ -325,14 +298,15 @@ async def update_week(
 @router.delete("/{week_id}", status_code=204)
 async def delete_week(
     week_id: int,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
 ) -> None:
     """Delete a week selection.
 
     Deletes the week and all associated movie/album selections.
+    Requires authentication.
     """
-    query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
     result = await db.execute(query)
     week = result.scalar_one_or_none()
 
@@ -345,18 +319,19 @@ async def delete_week(
 @router.post("/{week_id}/movies", response_model=WeekMovieResponse, status_code=201)
 async def add_movie_to_week(
     week_id: int,
+    current_user: CurrentUser,
     movie_data: AddMovieToWeek,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
     tmdb_client: TMDBClient = Depends(get_tmdb_client),
 ) -> WeekMovieResponse:
     """Add a movie to a week selection.
 
     Fetches the movie from TMDB (or cache) and adds it to the specified position.
     Position must be 1 or 2, and cannot be already occupied.
+    Requires authentication.
     """
     # Verify week exists and belongs to user
-    week_query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    week_query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
     week_result = await db.execute(week_query)
     week = week_result.scalar_one_or_none()
 
@@ -436,19 +411,20 @@ async def add_movie_to_week(
 async def remove_movie_from_week(
     week_id: int,
     position: int,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
 ) -> None:
     """Remove a movie from a week selection.
 
     Removes the movie at the specified position (1 or 2) from the week.
+    Requires authentication.
     """
     # Validate position
     if position not in (1, 2):
         raise HTTPException(status_code=400, detail="Position must be 1 or 2")
 
     # Verify week exists and belongs to user
-    week_query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    week_query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
     week_result = await db.execute(week_query)
     week = week_result.scalar_one_or_none()
 
@@ -474,18 +450,19 @@ async def remove_movie_from_week(
 @router.post("/{week_id}/albums", response_model=WeekAlbumResponse, status_code=201)
 async def add_album_to_week(
     week_id: int,
+    current_user: CurrentUser,
     album_data: AddAlbumToWeek,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
     musicbrainz_client: MusicBrainzClient = Depends(get_musicbrainz_client),
 ) -> WeekAlbumResponse:
     """Add an album to a week selection.
 
     Fetches the album from MusicBrainz (or cache) and adds it to the specified position.
     Position must be 1 or 2, and cannot be already occupied.
+    Requires authentication.
     """
     # Verify week exists and belongs to user
-    week_query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    week_query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
     week_result = await db.execute(week_query)
     week = week_result.scalar_one_or_none()
 
@@ -594,19 +571,20 @@ async def add_album_to_week(
 async def remove_album_from_week(
     week_id: int,
     position: int,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
 ) -> None:
     """Remove an album from a week selection.
 
     Removes the album at the specified position (1 or 2) from the week.
+    Requires authentication.
     """
     # Validate position
     if position not in (1, 2):
         raise HTTPException(status_code=400, detail="Position must be 1 or 2")
 
     # Verify week exists and belongs to user
-    week_query = select(Week).where(Week.id == week_id, Week.user_id == user_id)
+    week_query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
     week_result = await db.execute(week_query)
     week = week_result.scalar_one_or_none()
 
