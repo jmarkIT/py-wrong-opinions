@@ -10,10 +10,12 @@ This document provides comprehensive guidance for AI assistants working on the W
 - Associate movies and albums with specific weeks
 - Track their selections over time for future viewing and analysis
 
-**Current Status**: Early development (Phase 3)
+**Current Status**: Active development (Phase 5)
 - Phase 1: Basic FastAPI setup, Pydantic settings - **COMPLETE**
 - Phase 2: Database foundation with async SQLAlchemy - **COMPLETE**
-- Phase 3: External API clients - **NOT STARTED**
+- Phase 3: External API clients (TMDB, MusicBrainz) - **COMPLETE**
+- Phase 4: Core API - Movies & Albums endpoints - **COMPLETE**
+- Phase 5: Week Selections - **IN PROGRESS** (Steps 1-3 complete)
 
 **Target Users**: 2 users (small-scale personal project)
 
@@ -26,21 +28,34 @@ py-wrong-opinions/
 │   ├── main.py                  # FastAPI app entry point
 │   ├── config.py                # Pydantic settings management
 │   ├── database.py              # Async SQLAlchemy setup
-│   ├── api/                     # API route handlers (empty, planned)
+│   ├── api/                     # API route handlers
+│   │   ├── __init__.py
+│   │   ├── router.py            # Main router aggregation
+│   │   ├── movies.py            # Movie search/details endpoints
+│   │   ├── albums.py            # Album search/details endpoints
+│   │   └── weeks.py             # Week CRUD + movie/album associations
 │   ├── models/                  # SQLAlchemy ORM models
 │   │   ├── __init__.py          # Model exports
 │   │   ├── user.py              # User model
 │   │   ├── week.py              # Week, WeekMovie, WeekAlbum models
 │   │   ├── movie.py             # Movie model
 │   │   └── album.py             # Album model
-│   ├── schemas/                 # Pydantic request/response schemas (empty, planned)
-│   ├── services/                # Business logic & external API clients (empty, planned)
+│   ├── schemas/                 # Pydantic request/response schemas
+│   │   ├── __init__.py
+│   │   ├── movie.py             # Movie schemas
+│   │   ├── album.py             # Album schemas
+│   │   └── week.py              # Week schemas
+│   ├── services/                # Business logic & external API clients
+│   │   ├── __init__.py
+│   │   ├── base.py              # Base client and error classes
+│   │   ├── tmdb.py              # TMDB API client
+│   │   └── musicbrainz.py       # MusicBrainz API client
 │   └── utils/                   # Utility functions (empty, planned)
 ├── tests/                       # Test suite
 │   ├── conftest.py              # Pytest fixtures (AsyncClient)
-│   ├── test_api/                # API endpoint tests
+│   ├── test_api/                # API endpoint tests (movies, albums, weeks)
 │   ├── test_models/             # Model tests (empty)
-│   └── test_services/           # Service tests (empty)
+│   └── test_services/           # Service tests (TMDB, MusicBrainz clients)
 ├── migrations/                  # Alembic database migrations
 │   ├── env.py                   # Alembic environment configuration
 │   ├── script.py.mako           # Migration template
@@ -168,16 +183,24 @@ uv add --dev <package-name>      # Dev dependency
       assert response.status_code == 200
   ```
 
-### API Route Organization (planned)
+### API Route Organization
 - Routes grouped by resource in `src/wrong_opinions/api/`
 - Main router aggregation in `api/router.py`
 - Each route file exports a router: `router = APIRouter(prefix="/movies", tags=["movies"])`
+- Available endpoints:
+  - `/api/movies/search` - Search TMDB for movies
+  - `/api/movies/{tmdb_id}` - Get movie details (cached)
+  - `/api/albums/search` - Search MusicBrainz for albums
+  - `/api/albums/{musicbrainz_id}` - Get album details (cached)
+  - `/api/weeks` - CRUD operations for week selections
+  - `/api/weeks/{week_id}/movies` - Add/remove movies to weeks
 
-### External API Clients (planned)
+### External API Clients
 - Service classes in `src/wrong_opinions/services/`
-- TMDB client: `services/tmdb.py`
-- MusicBrainz client: `services/musicbrainz.py`
-- Must respect rate limits (MusicBrainz: 1 req/sec)
+- TMDB client: `services/tmdb.py` - Movie search and details
+- MusicBrainz client: `services/musicbrainz.py` - Album search and details
+- Base client with error handling: `services/base.py`
+- Rate limiting implemented (MusicBrainz: 1 req/sec)
 
 ## Code Conventions
 
@@ -486,20 +509,24 @@ uv run fastapi dev src/wrong_opinions/main.py
 | File | Purpose | Key Points |
 |------|---------|------------|
 | `pyproject.toml` | Project config, dependencies | Python 3.13+, Ruff settings, pytest config |
-| `src/wrong_opinions/main.py` | FastAPI app entry | Single health check endpoint currently |
+| `src/wrong_opinions/main.py` | FastAPI app entry | Health check + API router mounted at `/api` |
 | `src/wrong_opinions/config.py` | Settings management | Pydantic Settings, cached with `@lru_cache` |
 | `src/wrong_opinions/database.py` | Database setup | Async engine, session factory, `get_db` dependency |
+| `src/wrong_opinions/api/router.py` | API router aggregation | Combines movies, albums, weeks routers |
+| `src/wrong_opinions/api/weeks.py` | Week endpoints | CRUD + add/remove movie to week |
+| `src/wrong_opinions/services/tmdb.py` | TMDB client | Movie search, details, image URLs |
+| `src/wrong_opinions/services/musicbrainz.py` | MusicBrainz client | Album search, details, rate limiting |
 | `src/wrong_opinions/models/` | ORM models | User, Week, Movie, Album, WeekMovie, WeekAlbum |
+| `src/wrong_opinions/schemas/` | Pydantic schemas | Request/response models for API |
 | `alembic.ini` | Alembic config | Migration settings, ruff post-write hooks |
 | `migrations/env.py` | Migration environment | Async support, imports all models |
-| `migrations/versions/` | Migration files | Initial schema: `51cbe403ade8_initial_schema_with_all_models.py` |
 | `tests/conftest.py` | Test fixtures | `client` fixture for API testing |
 | `ARCHITECTURE.md` | Detailed plan | Complete data models, endpoints, implementation phases |
 | `.env.example` | Environment template | Copy to `.env` and fill in secrets |
 
 ## Current Implementation Status
 
-### Completed (Phase 1 & 2)
+### Completed (Phase 1-4)
 - ✅ UV project setup with `pyproject.toml`
 - ✅ Project structure (all directories created)
 - ✅ FastAPI app with health check endpoint
@@ -511,13 +538,23 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ Alembic migration setup with async support
 - ✅ Initial database migration
 - ✅ Database session dependency (`get_db`)
+- ✅ TMDB API client with search and details
+- ✅ MusicBrainz API client with rate limiting
+- ✅ Movie search and details endpoints
+- ✅ Album search and details endpoints
+- ✅ Caching layer for external API responses
+- ✅ Week CRUD endpoints
+- ✅ Add/remove movie to week endpoints
 
-### Not Started (Phase 3+)
-- ❌ External API clients (TMDB, MusicBrainz)
-- ❌ API endpoints (beyond health check)
-- ❌ Pydantic schemas for requests/responses
-- ❌ Authentication system
-- ❌ Comprehensive test coverage
+### In Progress (Phase 5)
+- 🔄 Add/remove album to week endpoints
+- 🔄 Week validation (1-2 movies, 1-2 albums)
+- 🔄 "Current week" helper endpoint
+
+### Not Started (Phase 6+)
+- ❌ User authentication (registration, login, JWT)
+- ❌ Protected endpoints with auth middleware
+- ❌ Statistics/analytics endpoints
 
 ## Version Information
 
