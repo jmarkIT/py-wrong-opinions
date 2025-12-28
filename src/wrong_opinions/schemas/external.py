@@ -57,6 +57,42 @@ class TMDBMovieDetails(BaseModel):
     homepage: str | None = Field(default=None, description="Official homepage URL")
 
 
+class TMDBCastMember(BaseModel):
+    """A single cast member from TMDB credits."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int = Field(description="TMDB person ID")
+    name: str = Field(description="Person's name")
+    character: str | None = Field(default=None, description="Character name")
+    order: int = Field(default=0, description="Billing order")
+    profile_path: str | None = Field(default=None, description="Profile image path")
+    known_for_department: str | None = Field(default=None, description="Primary department")
+
+
+class TMDBCrewMember(BaseModel):
+    """A single crew member from TMDB credits."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int = Field(description="TMDB person ID")
+    name: str = Field(description="Person's name")
+    department: str | None = Field(default=None, description="Department")
+    job: str | None = Field(default=None, description="Job title")
+    profile_path: str | None = Field(default=None, description="Profile image path")
+    known_for_department: str | None = Field(default=None, description="Primary department")
+
+
+class TMDBCreditsResponse(BaseModel):
+    """Response from TMDB movie credits endpoint."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int = Field(description="TMDB movie ID")
+    cast: list[TMDBCastMember] = Field(default_factory=list, description="Cast members")
+    crew: list[TMDBCrewMember] = Field(default_factory=list, description="Crew members")
+
+
 # MusicBrainz Schemas
 class MusicBrainzArtistCredit(BaseModel):
     """Artist credit information from MusicBrainz."""

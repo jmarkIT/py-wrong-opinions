@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from wrong_opinions.schemas.external import TMDBMovieDetails, TMDBMovieResult
+from wrong_opinions.schemas.external import (
+    TMDBMovieDetails,
+    TMDBMovieResult,
+)
 from wrong_opinions.services.base import APIError, NotFoundError, RateLimitError
 from wrong_opinions.services.tmdb import TMDBClient
 
@@ -59,6 +62,46 @@ SAMPLE_MOVIE_DETAILS = {
     "revenue": 100853753,
     "imdb_id": "tt0137523",
     "homepage": "https://www.foxmovies.com/movies/fight-club",
+}
+
+SAMPLE_CREDITS_RESPONSE = {
+    "id": 550,
+    "cast": [
+        {
+            "id": 819,
+            "name": "Edward Norton",
+            "character": "The Narrator",
+            "order": 0,
+            "profile_path": "/5XBzD5WuTyVQZeS4II6gs1nn5P6.jpg",
+            "known_for_department": "Acting",
+        },
+        {
+            "id": 287,
+            "name": "Brad Pitt",
+            "character": "Tyler Durden",
+            "order": 1,
+            "profile_path": "/oTB9vGIBacH5aQNS0pUM74QSWuf.jpg",
+            "known_for_department": "Acting",
+        },
+    ],
+    "crew": [
+        {
+            "id": 7467,
+            "name": "David Fincher",
+            "department": "Directing",
+            "job": "Director",
+            "profile_path": "/tpEczFclQZeKAiCeKZZ0adRvtfz.jpg",
+            "known_for_department": "Directing",
+        },
+        {
+            "id": 7468,
+            "name": "Jim Uhls",
+            "department": "Writing",
+            "job": "Screenplay",
+            "profile_path": None,
+            "known_for_department": "Writing",
+        },
+    ],
 }
 
 
@@ -343,3 +386,99 @@ class TestAPIErrorHandling:
                 await tmdb_client.search_movies("test")
 
             assert exc_info.value.status_code == 500
+
+
+class TestGetMovieCredits:
+    """Tests for getting movie credits."""
+
+    async def test_get_movie_credits_success(self, tmdb_client: TMDBClient) -> None:
+        """Test successful movie credits fetch."""
+        mock_response = httpx.Response(200, json=SAMPLE_CREDITS_RESPONSE)
+
+        with patch.object(tmdb_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            result = await tmdb_client.get_movie_credits(550)
+
+            assert result.id == 550
+            assert len(result.cast) == 2
+            assert len(result.crew) == 2
+            assert result.cast[0].name == "Edward Norton"
+            assert result.cast[0].character == "The Narrator"
+            assert result.crew[0].name == "David Fincher"
+            assert result.crew[0].job == "Director"
+
+    async def test_get_movie_credits_not_found(self, tmdb_client: TMDBClient) -> None:
+        """Test movie credits fetch for non-existent movie."""
+        mock_response = httpx.Response(404, json={"status_code": 34})
+
+        with patch.object(tmdb_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            with pytest.raises(NotFoundError):
+                await tmdb_client.get_movie_credits(99999999)
+
+    async def test_get_movie_credits_or_none_returns_none(
+        self, tmdb_client: TMDBClient
+    ) -> None:
+        """Test get_movie_credits_or_none returns None for non-existent movie."""
+        mock_response = httpx.Response(404, json={"status_code": 34})
+
+        with patch.object(tmdb_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            result = await tmdb_client.get_movie_credits_or_none(99999999)
+
+            assert result is None
+
+    async def test_get_movie_credits_or_none_returns_credits(
+        self, tmdb_client: TMDBClient
+    ) -> None:
+        """Test get_movie_credits_or_none returns credits when found."""
+        mock_response = httpx.Response(200, json=SAMPLE_CREDITS_RESPONSE)
+
+        with patch.object(tmdb_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            result = await tmdb_client.get_movie_credits_or_none(550)
+
+            assert result is not None
+            assert result.id == 550
+            assert len(result.cast) == 2
+
+
+class TestProfileURLGeneration:
+    """Tests for profile URL generation."""
+
+    def test_get_profile_url_valid(self, tmdb_client: TMDBClient) -> None:
+        """Test profile URL generation with valid path."""
+        url = tmdb_client.get_profile_url("/abc123.jpg")
+        assert url == "https://image.tmdb.org/t/p/w185/abc123.jpg"
+
+    def test_get_profile_url_custom_size(self, tmdb_client: TMDBClient) -> None:
+        """Test profile URL generation with custom size."""
+        url = tmdb_client.get_profile_url("/abc123.jpg", size="h632")
+        assert url == "https://image.tmdb.org/t/p/h632/abc123.jpg"
+
+    def test_get_profile_url_original_size(self, tmdb_client: TMDBClient) -> None:
+        """Test profile URL generation with original size."""
+        url = tmdb_client.get_profile_url("/abc123.jpg", size="original")
+        assert url == "https://image.tmdb.org/t/p/original/abc123.jpg"
+
+    def test_get_profile_url_invalid_size_fallback(self, tmdb_client: TMDBClient) -> None:
+        """Test profile URL generation falls back for invalid size."""
+        url = tmdb_client.get_profile_url("/abc123.jpg", size="invalid")
+        assert url == "https://image.tmdb.org/t/p/w185/abc123.jpg"
+
+    def test_get_profile_url_none_path(self, tmdb_client: TMDBClient) -> None:
+        """Test profile URL generation with None path returns None."""
+        url = tmdb_client.get_profile_url(None)
+        assert url is None

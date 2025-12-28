@@ -65,3 +65,42 @@ class CachedMovie(BaseModel):
     poster_path: str | None = Field(default=None, description="Poster image path")
     overview: str | None = Field(default=None, description="Movie overview/synopsis")
     cached_at: datetime = Field(description="When the movie data was cached")
+
+
+class CastMember(BaseModel):
+    """A cast member in API response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    tmdb_id: int = Field(description="TMDB person ID")
+    name: str = Field(description="Person's name")
+    character: str | None = Field(default=None, description="Character name")
+    order: int = Field(default=0, description="Billing order")
+    profile_url: str | None = Field(default=None, description="Full profile image URL")
+
+
+class CrewMember(BaseModel):
+    """A crew member in API response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    tmdb_id: int = Field(description="TMDB person ID")
+    name: str = Field(description="Person's name")
+    department: str | None = Field(default=None, description="Department")
+    job: str | None = Field(default=None, description="Job title")
+    profile_url: str | None = Field(default=None, description="Full profile image URL")
+
+
+class MovieCredits(BaseModel):
+    """Movie credits (cast and crew) for API response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    cast: list[CastMember] = Field(default_factory=list, description="Cast members")
+    crew: list[CrewMember] = Field(default_factory=list, description="Crew members")
+
+
+class MovieDetailsWithCredits(MovieDetails):
+    """Movie details including cast and crew."""
+
+    credits: MovieCredits | None = Field(default=None, description="Movie cast and crew")

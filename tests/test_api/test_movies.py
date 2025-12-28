@@ -9,6 +9,9 @@ from httpx import AsyncClient
 from wrong_opinions.database import get_db
 from wrong_opinions.main import app
 from wrong_opinions.schemas.external import (
+    TMDBCastMember,
+    TMDBCreditsResponse,
+    TMDBCrewMember,
     TMDBMovieDetails,
     TMDBMovieResult,
     TMDBSearchResponse,
@@ -66,6 +69,46 @@ SAMPLE_MOVIE_DETAILS = TMDBMovieDetails(
     homepage="https://www.foxmovies.com/movies/fight-club",
 )
 
+SAMPLE_CREDITS_RESPONSE = TMDBCreditsResponse(
+    id=550,
+    cast=[
+        TMDBCastMember(
+            id=819,
+            name="Edward Norton",
+            character="The Narrator",
+            order=0,
+            profile_path="/5XBzD5WuTyVQZeS4II6gs1nn5P6.jpg",
+            known_for_department="Acting",
+        ),
+        TMDBCastMember(
+            id=287,
+            name="Brad Pitt",
+            character="Tyler Durden",
+            order=1,
+            profile_path="/oTB9vGIBacH5aQNS0pUM74QSWuf.jpg",
+            known_for_department="Acting",
+        ),
+    ],
+    crew=[
+        TMDBCrewMember(
+            id=7467,
+            name="David Fincher",
+            department="Directing",
+            job="Director",
+            profile_path="/tpEczFclQZeKAiCeKZZ0adRvtfz.jpg",
+            known_for_department="Directing",
+        ),
+        TMDBCrewMember(
+            id=7468,
+            name="Jim Uhls",
+            department="Writing",
+            job="Screenplay",
+            profile_path=None,
+            known_for_department="Writing",
+        ),
+    ],
+)
+
 
 @pytest.fixture
 def mock_tmdb_client():
@@ -73,10 +116,14 @@ def mock_tmdb_client():
     mock_client = MagicMock(spec=TMDBClient)
     mock_client.search_movies = AsyncMock(return_value=SAMPLE_SEARCH_RESPONSE)
     mock_client.get_movie = AsyncMock(return_value=SAMPLE_MOVIE_DETAILS)
+    mock_client.get_movie_credits = AsyncMock(return_value=SAMPLE_CREDITS_RESPONSE)
     mock_client.get_poster_url.side_effect = lambda path, size="w342": (
         f"https://image.tmdb.org/t/p/{size}{path}" if path else None
     )
     mock_client.get_backdrop_url.side_effect = lambda path, size="w780": (
+        f"https://image.tmdb.org/t/p/{size}{path}" if path else None
+    )
+    mock_client.get_profile_url.side_effect = lambda path, size="w185": (
         f"https://image.tmdb.org/t/p/{size}{path}" if path else None
     )
     mock_client.close = AsyncMock()
@@ -264,5 +311,91 @@ class TestGetMovie:
 
             assert response.status_code == 404
             assert response.json()["detail"] == "Movie not found"
+        finally:
+            app.dependency_overrides.clear()
+
+
+class TestGetMovieCredits:
+    """Tests for get movie credits endpoint."""
+
+    async def test_get_movie_credits_success(
+        self,
+        client: AsyncClient,
+        mock_tmdb_client: MagicMock,
+        mock_db_session: AsyncMock,
+    ) -> None:
+        """Test successful movie credits fetch from API."""
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.get("/api/movies/550/credits")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "cast" in data
+            assert "crew" in data
+            assert len(data["cast"]) == 2
+            assert data["cast"][0]["tmdb_id"] == 819
+            assert data["cast"][0]["name"] == "Edward Norton"
+            assert data["cast"][0]["character"] == "The Narrator"
+            assert data["cast"][0]["profile_url"] is not None
+            # Crew is filtered to key roles only
+            assert len(data["crew"]) == 2
+            assert data["crew"][0]["tmdb_id"] == 7467
+            assert data["crew"][0]["name"] == "David Fincher"
+            assert data["crew"][0]["job"] == "Director"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_movie_credits_not_found(
+        self,
+        client: AsyncClient,
+        mock_tmdb_client: MagicMock,
+        mock_db_session: AsyncMock,
+    ) -> None:
+        """Test movie credits fetch for non-existent movie."""
+        from wrong_opinions.services.base import NotFoundError
+
+        mock_tmdb_client.get_movie_credits.side_effect = NotFoundError("Movie not found")
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.get("/api/movies/99999999/credits")
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "Movie not found"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_movie_credits_with_limit(
+        self,
+        client: AsyncClient,
+        mock_tmdb_client: MagicMock,
+        mock_db_session: AsyncMock,
+    ) -> None:
+        """Test movie credits fetch with custom limit."""
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.get("/api/movies/550/credits?limit=5")
+
+            assert response.status_code == 200
+            # The endpoint was called successfully with limit
+            mock_tmdb_client.get_movie_credits.assert_called_once_with(550)
         finally:
             app.dependency_overrides.clear()
