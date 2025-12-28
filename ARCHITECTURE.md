@@ -310,11 +310,11 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - [x] **Step 5:** Protect relevant endpoints
 
 ### Phase 7: Testing & Polish
-- [ ] **Step 1:** Write unit tests for services
-- [ ] **Step 2:** Write integration tests for API endpoints
-- [ ] **Step 3:** Add request validation error handling
-- [ ] **Step 4:** Add proper HTTP error responses
-- [ ] **Step 5:** API documentation (FastAPI auto-generates OpenAPI)
+- [x] **Step 1:** Write unit tests for services
+- [x] **Step 2:** Write integration tests for API endpoints
+- [x] **Step 3:** Add request validation error handling
+- [x] **Step 4:** Add proper HTTP error responses
+- [x] **Step 5:** API documentation (FastAPI auto-generates OpenAPI)
 
 ### Phase 8: Future Enhancements (Optional)
 - [ ] **Step 1:** Movie cast & crew data - Pull and store cast/crew from TMDB (`/movie/{id}/credits`)

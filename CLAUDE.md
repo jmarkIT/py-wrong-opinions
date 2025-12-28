@@ -10,13 +10,14 @@ This document provides comprehensive guidance for AI assistants working on the W
 - Associate movies and albums with specific weeks
 - Track their selections over time for future viewing and analysis
 
-**Current Status**: Active development (Phase 7)
+**Current Status**: Active development (Phase 8 - Future Enhancements)
 - Phase 1: Basic FastAPI setup, Pydantic settings - **COMPLETE**
 - Phase 2: Database foundation with async SQLAlchemy - **COMPLETE**
 - Phase 3: External API clients (TMDB, MusicBrainz) - **COMPLETE**
 - Phase 4: Core API - Movies & Albums endpoints - **COMPLETE**
 - Phase 5: Week Selections - **COMPLETE**
 - Phase 6: Authentication - **COMPLETE**
+- Phase 7: Testing & Polish - **COMPLETE**
 
 **Target Users**: 2 users (small-scale personal project)
 
@@ -529,7 +530,7 @@ uv run fastapi dev src/wrong_opinions/main.py
 
 ## Current Implementation Status
 
-### Completed (Phase 1-5)
+### Completed (Phase 1-7)
 - ✅ UV project setup with `pyproject.toml`
 - ✅ Project structure (all directories created)
 - ✅ FastAPI app with health check endpoint
@@ -553,8 +554,12 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ "Current week" helper endpoint (`GET /api/weeks/current`)
 - ✅ User authentication (registration, login, JWT)
 - ✅ Protected endpoints with auth middleware
+- ✅ Unit tests for services (TMDB, MusicBrainz clients)
+- ✅ Integration tests for API endpoints
+- ✅ Global exception handlers for consistent error responses
+- ✅ API documentation (auto-generated OpenAPI at `/docs`)
 
-### Not Started (Phase 7+)
+### Not Started (Phase 8+)
 - ❌ Statistics/analytics endpoints
 
 ## Version Information

@@ -536,9 +536,7 @@ class TestJWT:
 class TestGetCurrentUser:
     """Tests for get_current_user dependency and /me endpoint."""
 
-    async def test_get_me_success(
-        self, client: AsyncClient, mock_db_session: AsyncMock
-    ) -> None:
+    async def test_get_me_success(self, client: AsyncClient, mock_db_session: AsyncMock) -> None:
         """Test successful /me endpoint with valid token."""
         mock_user = create_mock_user()
 
