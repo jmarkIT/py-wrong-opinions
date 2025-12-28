@@ -193,6 +193,7 @@ uv add --dev <package-name>      # Dev dependency
   - `/api/albums/search` - Search MusicBrainz for albums
   - `/api/albums/{musicbrainz_id}` - Get album details (cached)
   - `/api/weeks` - CRUD operations for week selections
+  - `/api/weeks/current` - Get or create the current ISO week
   - `/api/weeks/{week_id}/movies` - Add/remove movies to weeks
   - `/api/weeks/{week_id}/albums` - Add/remove albums to weeks
 
@@ -527,7 +528,7 @@ uv run fastapi dev src/wrong_opinions/main.py
 
 ## Current Implementation Status
 
-### Completed (Phase 1-4)
+### Completed (Phase 1-5)
 - ✅ UV project setup with `pyproject.toml`
 - ✅ Project structure (all directories created)
 - ✅ FastAPI app with health check endpoint
@@ -547,10 +548,8 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ Week CRUD endpoints
 - ✅ Add/remove movie to week endpoints
 - ✅ Add/remove album to week endpoints
-
-### In Progress (Phase 5)
-- 🔄 Week validation (1-2 movies, 1-2 albums)
-- 🔄 "Current week" helper endpoint
+- ✅ Week validation (1-2 movies, 1-2 albums via position constraints)
+- ✅ "Current week" helper endpoint (`GET /api/weeks/current`)
 
 ### Not Started (Phase 6+)
 - ❌ User authentication (registration, login, JWT)
