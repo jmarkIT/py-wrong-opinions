@@ -303,8 +303,8 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - [x] **Step 6:** Implement "current week" helper endpoint
 
 ### Phase 6: Authentication
-- [ ] **Step 1:** Implement user registration
-- [ ] **Step 2:** Implement password hashing (bcrypt or argon2)
+- [x] **Step 1:** Implement user registration
+- [x] **Step 2:** Implement password hashing (bcrypt or argon2)
 - [ ] **Step 3:** Implement JWT token generation/validation
 - [ ] **Step 4:** Add auth middleware/dependencies
 - [ ] **Step 5:** Protect relevant endpoints

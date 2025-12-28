@@ -21,6 +21,10 @@ from wrong_opinions.schemas.movie import (
     MovieSearchResponse,
     MovieSearchResult,
 )
+from wrong_opinions.schemas.user import (
+    UserCreate,
+    UserResponse,
+)
 from wrong_opinions.schemas.week import (
     AddAlbumToWeek,
     AddMovieToWeek,
@@ -55,6 +59,9 @@ __all__ = [
     "AlbumSearchResponse",
     "AlbumDetails",
     "CachedAlbum",
+    # User schemas
+    "UserCreate",
+    "UserResponse",
     # Week schemas
     "WeekBase",
     "WeekCreate",

@@ -10,12 +10,13 @@ This document provides comprehensive guidance for AI assistants working on the W
 - Associate movies and albums with specific weeks
 - Track their selections over time for future viewing and analysis
 
-**Current Status**: Active development (Phase 5)
+**Current Status**: Active development (Phase 6)
 - Phase 1: Basic FastAPI setup, Pydantic settings - **COMPLETE**
 - Phase 2: Database foundation with async SQLAlchemy - **COMPLETE**
 - Phase 3: External API clients (TMDB, MusicBrainz) - **COMPLETE**
 - Phase 4: Core API - Movies & Albums endpoints - **COMPLETE**
-- Phase 5: Week Selections - **IN PROGRESS** (Steps 1-4 complete)
+- Phase 5: Week Selections - **COMPLETE**
+- Phase 6: Authentication - **IN PROGRESS** (Steps 1-2 complete)
 
 **Target Users**: 2 users (small-scale personal project)
 
