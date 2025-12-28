@@ -276,23 +276,23 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - [x] Add database session dependency for FastAPI
 
 ### Phase 3: External API Clients
-- [ ] Implement TMDB client service
-  - [ ] Movie search
-  - [ ] Movie details fetch
-  - [ ] Image URL generation
-- [ ] Implement MusicBrainz client service
-  - [ ] Album/release search
-  - [ ] Album details fetch
-  - [ ] Cover art URL fetching
-  - [ ] Rate limiting (1 req/sec)
+- [x] Implement TMDB client service
+  - [x] Movie search
+  - [x] Movie details fetch
+  - [x] Image URL generation
+- [x] Implement MusicBrainz client service
+  - [x] Album/release search
+  - [x] Album details fetch
+  - [x] Cover art URL fetching
+  - [x] Rate limiting (1 req/sec)
 
 ### Phase 4: Core API - Movies & Albums
-- [ ] Create Pydantic schemas for movies/albums
-- [ ] Implement movie search endpoint
-- [ ] Implement movie details endpoint
-- [ ] Implement album search endpoint
-- [ ] Implement album details endpoint
-- [ ] Add caching layer for external API responses
+- [x] Create Pydantic schemas for movies/albums
+- [x] Implement movie search endpoint
+- [x] Implement movie details endpoint
+- [x] Implement album search endpoint
+- [x] Implement album details endpoint
+- [x] Add caching layer for external API responses
 
 ### Phase 5: Week Selections
 - [ ] Create week-related Pydantic schemas

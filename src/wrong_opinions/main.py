@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 
 from wrong_opinions import __version__
+from wrong_opinions.api import api_router
 from wrong_opinions.config import get_settings
 
 settings = get_settings()
@@ -12,6 +13,9 @@ app = FastAPI(
     version=__version__,
     debug=settings.debug,
 )
+
+# Include API router
+app.include_router(api_router)
 
 
 @app.get("/health")

@@ -1,5 +1,11 @@
 """Pydantic schemas for request/response validation."""
 
+from wrong_opinions.schemas.album import (
+    AlbumDetails,
+    AlbumSearchResponse,
+    AlbumSearchResult,
+    CachedAlbum,
+)
 from wrong_opinions.schemas.external import (
     MusicBrainzArtistCredit,
     MusicBrainzReleaseDetails,
@@ -9,8 +15,15 @@ from wrong_opinions.schemas.external import (
     TMDBMovieResult,
     TMDBSearchResponse,
 )
+from wrong_opinions.schemas.movie import (
+    CachedMovie,
+    MovieDetails,
+    MovieSearchResponse,
+    MovieSearchResult,
+)
 
 __all__ = [
+    # External API schemas
     "TMDBMovieResult",
     "TMDBSearchResponse",
     "TMDBMovieDetails",
@@ -18,4 +31,14 @@ __all__ = [
     "MusicBrainzReleaseResult",
     "MusicBrainzReleaseDetails",
     "MusicBrainzSearchResponse",
+    # Movie schemas
+    "MovieSearchResult",
+    "MovieSearchResponse",
+    "MovieDetails",
+    "CachedMovie",
+    # Album schemas
+    "AlbumSearchResult",
+    "AlbumSearchResponse",
+    "AlbumDetails",
+    "CachedAlbum",
 ]
