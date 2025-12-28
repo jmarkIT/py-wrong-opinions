@@ -261,75 +261,75 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 ## Implementation Phases
 
 ### Phase 1: Project Setup
-- [x] Initialize UV project with `pyproject.toml`
-- [x] Set up project structure (directories, `__init__.py` files)
-- [x] Configure FastAPI app with basic health check endpoint
-- [x] Set up Pydantic settings management
-- [x] Configure Ruff for linting/formatting
-- [x] Add basic pytest configuration
+- [x] **Step 1:** Initialize UV project with `pyproject.toml`
+- [x] **Step 2:** Set up project structure (directories, `__init__.py` files)
+- [x] **Step 3:** Configure FastAPI app with basic health check endpoint
+- [x] **Step 4:** Set up Pydantic settings management
+- [x] **Step 5:** Configure Ruff for linting/formatting
+- [x] **Step 6:** Add basic pytest configuration
 
 ### Phase 2: Database Foundation
-- [x] Set up SQLAlchemy with async support
-- [x] Create all ORM models
-- [x] Configure Alembic for migrations
-- [x] Create initial migration
-- [x] Add database session dependency for FastAPI
+- [x] **Step 1:** Set up SQLAlchemy with async support
+- [x] **Step 2:** Create all ORM models
+- [x] **Step 3:** Configure Alembic for migrations
+- [x] **Step 4:** Create initial migration
+- [x] **Step 5:** Add database session dependency for FastAPI
 
 ### Phase 3: External API Clients
-- [x] Implement TMDB client service
-  - [x] Movie search
-  - [x] Movie details fetch
-  - [x] Image URL generation
-- [x] Implement MusicBrainz client service
-  - [x] Album/release search
-  - [x] Album details fetch
-  - [x] Cover art URL fetching
-  - [x] Rate limiting (1 req/sec)
+- [x] **Step 1:** Implement TMDB client service
+  - [x] **Step 1a:** Movie search
+  - [x] **Step 1b:** Movie details fetch
+  - [x] **Step 1c:** Image URL generation
+- [x] **Step 2:** Implement MusicBrainz client service
+  - [x] **Step 2a:** Album/release search
+  - [x] **Step 2b:** Album details fetch
+  - [x] **Step 2c:** Cover art URL fetching
+  - [x] **Step 2d:** Rate limiting (1 req/sec)
 
 ### Phase 4: Core API - Movies & Albums
-- [x] Create Pydantic schemas for movies/albums
-- [x] Implement movie search endpoint
-- [x] Implement movie details endpoint
-- [x] Implement album search endpoint
-- [x] Implement album details endpoint
-- [x] Add caching layer for external API responses
+- [x] **Step 1:** Create Pydantic schemas for movies/albums
+- [x] **Step 2:** Implement movie search endpoint
+- [x] **Step 3:** Implement movie details endpoint
+- [x] **Step 4:** Implement album search endpoint
+- [x] **Step 5:** Implement album details endpoint
+- [x] **Step 6:** Add caching layer for external API responses
 
 ### Phase 5: Week Selections
-- [ ] Create week-related Pydantic schemas
-- [ ] Implement CRUD endpoints for weeks
-- [ ] Implement add/remove movie to week
-- [ ] Implement add/remove album to week
-- [ ] Add validation (1-2 movies, 1-2 albums per week)
-- [ ] Implement "current week" helper endpoint
+- [ ] **Step 1:** Create week-related Pydantic schemas
+- [ ] **Step 2:** Implement CRUD endpoints for weeks
+- [ ] **Step 3:** Implement add/remove movie to week
+- [ ] **Step 4:** Implement add/remove album to week
+- [ ] **Step 5:** Add validation (1-2 movies, 1-2 albums per week)
+- [ ] **Step 6:** Implement "current week" helper endpoint
 
 ### Phase 6: Authentication
-- [ ] Implement user registration
-- [ ] Implement password hashing (bcrypt or argon2)
-- [ ] Implement JWT token generation/validation
-- [ ] Add auth middleware/dependencies
-- [ ] Protect relevant endpoints
+- [ ] **Step 1:** Implement user registration
+- [ ] **Step 2:** Implement password hashing (bcrypt or argon2)
+- [ ] **Step 3:** Implement JWT token generation/validation
+- [ ] **Step 4:** Add auth middleware/dependencies
+- [ ] **Step 5:** Protect relevant endpoints
 
 ### Phase 7: Testing & Polish
-- [ ] Write unit tests for services
-- [ ] Write integration tests for API endpoints
-- [ ] Add request validation error handling
-- [ ] Add proper HTTP error responses
-- [ ] API documentation (FastAPI auto-generates OpenAPI)
+- [ ] **Step 1:** Write unit tests for services
+- [ ] **Step 2:** Write integration tests for API endpoints
+- [ ] **Step 3:** Add request validation error handling
+- [ ] **Step 4:** Add proper HTTP error responses
+- [ ] **Step 5:** API documentation (FastAPI auto-generates OpenAPI)
 
 ### Phase 8: Future Enhancements (Optional)
-- [ ] **Movie cast & crew data** - Pull and store cast/crew from TMDB (`/movie/{id}/credits`)
-  - [ ] Create `Person`, `MovieCast`, `MovieCrew` models
-  - [ ] Store actor names, roles, profile images
-  - [ ] Store director, writer, composer, etc.
-- [ ] **Album artist details** - Pull full artist info from MusicBrainz
-  - [ ] Create `Artist` model with MusicBrainz artist ID
-  - [ ] Store artist bio, origin, active years
-  - [ ] Link albums to multiple artists (collaborations)
-- [ ] Statistics/analytics endpoints
-- [ ] Export functionality (CSV, JSON)
-- [ ] Multiple users viewing each other's selections
-- [ ] Rating/review system for selections
-- [ ] Recommendations based on history
+- [ ] **Step 1:** Movie cast & crew data - Pull and store cast/crew from TMDB (`/movie/{id}/credits`)
+  - [ ] **Step 1a:** Create `Person`, `MovieCast`, `MovieCrew` models
+  - [ ] **Step 1b:** Store actor names, roles, profile images
+  - [ ] **Step 1c:** Store director, writer, composer, etc.
+- [ ] **Step 2:** Album artist details - Pull full artist info from MusicBrainz
+  - [ ] **Step 2a:** Create `Artist` model with MusicBrainz artist ID
+  - [ ] **Step 2b:** Store artist bio, origin, active years
+  - [ ] **Step 2c:** Link albums to multiple artists (collaborations)
+- [ ] **Step 3:** Statistics/analytics endpoints
+- [ ] **Step 4:** Export functionality (CSV, JSON)
+- [ ] **Step 5:** Multiple users viewing each other's selections
+- [ ] **Step 6:** Rating/review system for selections
+- [ ] **Step 7:** Recommendations based on history
 
 ---
 
