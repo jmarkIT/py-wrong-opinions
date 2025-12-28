@@ -295,7 +295,7 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - [x] **Step 6:** Add caching layer for external API responses
 
 ### Phase 5: Week Selections
-- [ ] **Step 1:** Create week-related Pydantic schemas
+- [x] **Step 1:** Create week-related Pydantic schemas
 - [ ] **Step 2:** Implement CRUD endpoints for weeks
 - [ ] **Step 3:** Implement add/remove movie to week
 - [ ] **Step 4:** Implement add/remove album to week
