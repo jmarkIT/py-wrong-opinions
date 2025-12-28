@@ -16,7 +16,7 @@ This document provides comprehensive guidance for AI assistants working on the W
 - Phase 3: External API clients (TMDB, MusicBrainz) - **COMPLETE**
 - Phase 4: Core API - Movies & Albums endpoints - **COMPLETE**
 - Phase 5: Week Selections - **COMPLETE**
-- Phase 6: Authentication - **IN PROGRESS** (Steps 1-3 complete)
+- Phase 6: Authentication - **IN PROGRESS** (Steps 1-4 complete)
 
 **Target Users**: 2 users (small-scale personal project)
 

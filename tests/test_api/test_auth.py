@@ -531,3 +531,168 @@ class TestJWT:
         payload = decode_access_token(tampered_token)
 
         assert payload is None
+
+
+class TestGetCurrentUser:
+    """Tests for get_current_user dependency and /me endpoint."""
+
+    async def test_get_me_success(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test successful /me endpoint with valid token."""
+        mock_user = create_mock_user()
+
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = mock_user
+        mock_db_session.execute = AsyncMock(return_value=user_result)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            # Create a valid token for the mock user
+            token = create_access_token(data={"sub": str(mock_user.id)})
+
+            response = await client.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["id"] == mock_user.id
+            assert data["username"] == mock_user.username
+            assert data["email"] == mock_user.email
+            assert data["is_active"] == mock_user.is_active
+            # Password should NOT be in response
+            assert "password" not in data
+            assert "hashed_password" not in data
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_me_no_token(self, client: AsyncClient) -> None:
+        """Test /me endpoint without token returns 401."""
+        response = await client.get("/api/auth/me")
+
+        assert response.status_code == 401
+        assert "Not authenticated" in response.json()["detail"]
+
+    async def test_get_me_invalid_token(self, client: AsyncClient) -> None:
+        """Test /me endpoint with invalid token returns 401."""
+        response = await client.get(
+            "/api/auth/me",
+            headers={"Authorization": "Bearer invalid.token.here"},
+        )
+
+        assert response.status_code == 401
+        assert "Could not validate credentials" in response.json()["detail"]
+
+    async def test_get_me_expired_token(self, client: AsyncClient) -> None:
+        """Test /me endpoint with expired token returns 401."""
+        from datetime import timedelta
+
+        # Create an already-expired token
+        token = create_access_token(
+            data={"sub": "1"},
+            expires_delta=timedelta(seconds=-1),  # Already expired
+        )
+
+        response = await client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 401
+        assert "Could not validate credentials" in response.json()["detail"]
+
+    async def test_get_me_user_not_found(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test /me endpoint when user no longer exists returns 401."""
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = None
+        mock_db_session.execute = AsyncMock(return_value=user_result)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            # Create a valid token for a user that doesn't exist
+            token = create_access_token(data={"sub": "999"})
+
+            response = await client.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+            assert response.status_code == 401
+            assert "Could not validate credentials" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_me_inactive_user(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test /me endpoint with inactive user returns 403."""
+        mock_user = create_mock_user(is_active=False)
+
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = mock_user
+        mock_db_session.execute = AsyncMock(return_value=user_result)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            token = create_access_token(data={"sub": str(mock_user.id)})
+
+            response = await client.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+            assert response.status_code == 403
+            assert "User account is inactive" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_me_malformed_token_subject(self, client: AsyncClient) -> None:
+        """Test /me endpoint with non-integer user ID in token returns 401."""
+        # Create a token with a non-integer subject
+        token = create_access_token(data={"sub": "not-an-integer"})
+
+        response = await client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 401
+        assert "Could not validate credentials" in response.json()["detail"]
+
+    async def test_get_me_token_missing_subject(self, client: AsyncClient) -> None:
+        """Test /me endpoint with token missing 'sub' claim returns 401."""
+        # Create a token without a subject
+        from jose import jwt
+
+        from wrong_opinions.config import get_settings
+
+        settings = get_settings()
+        token = jwt.encode(
+            {"some_other_claim": "value", "exp": datetime(2099, 1, 1)},
+            settings.secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+
+        response = await client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 401
+        assert "Could not validate credentials" in response.json()["detail"]

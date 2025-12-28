@@ -1,11 +1,23 @@
 """Security utilities for password hashing and JWT handling."""
 
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Annotated
 
 import bcrypt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from wrong_opinions.config import get_settings
+from wrong_opinions.database import get_db
+
+if TYPE_CHECKING:
+    from wrong_opinions.models.user import User
+
+# OAuth2 scheme for Bearer token authentication
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 def hash_password(password: str) -> str:
@@ -70,3 +82,83 @@ def decode_access_token(token: str) -> dict | None:
         return payload
     except JWTError:
         return None
+
+
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the current authenticated user from JWT token.
+
+    This is a FastAPI dependency that validates the JWT token from the
+    Authorization header and returns the corresponding user.
+
+    Args:
+        token: JWT token extracted from Authorization header
+        db: Database session
+
+    Returns:
+        The authenticated User object
+
+    Raises:
+        HTTPException 401: If token is invalid, expired, or user not found
+    """
+    # Import here to avoid circular import
+    from wrong_opinions.models.user import User
+
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    payload = decode_access_token(token)
+    if payload is None:
+        raise credentials_exception
+
+    user_id_str: str | None = payload.get("sub")
+    if user_id_str is None:
+        raise credentials_exception
+
+    try:
+        user_id = int(user_id_str)
+    except ValueError:
+        raise credentials_exception from None
+
+    # Look up user in database
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise credentials_exception
+
+    return user
+
+
+async def get_current_active_user(
+    current_user: Annotated["User", Depends(get_current_user)],
+):
+    """Get the current active user.
+
+    This dependency builds on get_current_user and additionally checks
+    that the user account is active.
+
+    Args:
+        current_user: User from get_current_user dependency
+
+    Returns:
+        The authenticated active User object
+
+    Raises:
+        HTTPException 403: If user account is inactive
+    """
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive",
+        )
+    return current_user
+
+
+# Type alias for use in route dependencies
+CurrentUser = Annotated["User", Depends(get_current_active_user)]

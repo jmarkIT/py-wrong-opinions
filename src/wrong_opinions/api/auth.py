@@ -10,6 +10,7 @@ from wrong_opinions.database import get_db
 from wrong_opinions.models.user import User
 from wrong_opinions.schemas.user import Token, UserCreate, UserLogin, UserResponse
 from wrong_opinions.utils.security import (
+    CurrentUser,
     create_access_token,
     hash_password,
     verify_password,
@@ -110,3 +111,21 @@ async def login(
     # Create and return access token
     access_token = create_access_token(data={"sub": str(user.id)})
     return Token(access_token=access_token, token_type="bearer")
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(current_user: CurrentUser) -> UserResponse:
+    """Get the current authenticated user's information.
+
+    Requires a valid JWT token in the Authorization header.
+
+    Returns:
+        Current user's profile information (excluding password)
+    """
+    return UserResponse(
+        id=current_user.id,
+        username=current_user.username,
+        email=current_user.email,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at,
+    )
