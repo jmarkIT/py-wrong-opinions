@@ -56,3 +56,34 @@ class CachedAlbum(BaseModel):
     artist: str = Field(description="Primary artist name")
     release_date: date | None = Field(default=None, description="Release date")
     cover_art_url: str | None = Field(default=None, description="Cover art URL")
+
+
+class ArtistCredit(BaseModel):
+    """An artist credit in API response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    musicbrainz_id: str = Field(description="MusicBrainz artist ID (UUID)")
+    name: str = Field(description="Artist name")
+    sort_name: str | None = Field(default=None, description="Sort name")
+    disambiguation: str | None = Field(default=None, description="Disambiguation info")
+    artist_type: str | None = Field(default=None, description="Artist type (Person, Group, etc.)")
+    country: str | None = Field(default=None, description="Artist country")
+    join_phrase: str | None = Field(
+        default=None, description="Join phrase (e.g., ' & ', ' feat. ')"
+    )
+    order: int = Field(default=0, description="Order in credits list")
+
+
+class AlbumCredits(BaseModel):
+    """Album credits (artists) for API response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    artists: list[ArtistCredit] = Field(default_factory=list, description="Artist credits")
+
+
+class AlbumDetailsWithCredits(AlbumDetails):
+    """Album details including artist credits."""
+
+    credits: AlbumCredits | None = Field(default=None, description="Album artist credits")

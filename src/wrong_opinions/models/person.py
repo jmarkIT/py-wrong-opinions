@@ -42,9 +42,7 @@ class MovieCast(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id", ondelete="CASCADE"), index=True)
-    person_id: Mapped[int] = mapped_column(
-        ForeignKey("people.id", ondelete="CASCADE"), index=True
-    )
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), index=True)
     character: Mapped[str | None] = mapped_column(Text, nullable=True)
     order: Mapped[int] = mapped_column(default=0)  # Billing order in credits
     cached_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
@@ -61,9 +59,7 @@ class MovieCrew(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id", ondelete="CASCADE"), index=True)
-    person_id: Mapped[int] = mapped_column(
-        ForeignKey("people.id", ondelete="CASCADE"), index=True
-    )
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), index=True)
     department: Mapped[str | None] = mapped_column(String(100), nullable=True)
     job: Mapped[str | None] = mapped_column(String(100), nullable=True)
     cached_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)

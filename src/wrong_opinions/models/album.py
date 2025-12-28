@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from wrong_opinions.database import Base
 
 if TYPE_CHECKING:
+    from wrong_opinions.models.artist import AlbumArtist
     from wrong_opinions.models.week import WeekAlbum
 
 
@@ -29,5 +30,8 @@ class Album(Base):
 
     # Relationships
     week_albums: Mapped[list[WeekAlbum]] = relationship(
+        back_populates="album", cascade="all, delete-orphan"
+    )
+    artist_credits: Mapped[list[AlbumArtist]] = relationship(
         back_populates="album", cascade="all, delete-orphan"
     )

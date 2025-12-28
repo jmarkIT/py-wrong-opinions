@@ -19,6 +19,7 @@ This document provides comprehensive guidance for AI assistants working on the W
 - Phase 6: Authentication - **COMPLETE**
 - Phase 7: Testing & Polish - **COMPLETE**
 - Phase 8 Step 1: Movie cast & crew data - **COMPLETE**
+- Phase 8 Step 2: Album artist details - **COMPLETE**
 
 **Target Users**: 2 users (small-scale personal project)
 
@@ -43,7 +44,8 @@ py-wrong-opinions/
 │   │   ├── week.py              # Week, WeekMovie, WeekAlbum models
 │   │   ├── movie.py             # Movie model
 │   │   ├── album.py             # Album model
-│   │   └── person.py            # Person, MovieCast, MovieCrew models
+│   │   ├── person.py            # Person, MovieCast, MovieCrew models
+│   │   └── artist.py            # Artist, AlbumArtist models
 │   ├── schemas/                 # Pydantic request/response schemas
 │   │   ├── __init__.py
 │   │   ├── movie.py             # Movie schemas
@@ -197,6 +199,7 @@ uv add --dev <package-name>      # Dev dependency
   - `/api/movies/{tmdb_id}/credits` - Get movie cast & crew (cached)
   - `/api/albums/search` - Search MusicBrainz for albums
   - `/api/albums/{musicbrainz_id}` - Get album details (cached)
+  - `/api/albums/{musicbrainz_id}/credits` - Get album artist credits (cached)
   - `/api/weeks` - CRUD operations for week selections
   - `/api/weeks/current` - Get or create the current ISO week
   - `/api/weeks/{week_id}/movies` - Add/remove movies to weeks
@@ -541,7 +544,7 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ Ruff configuration for linting/formatting
 - ✅ Pytest configuration with async support
 - ✅ Async SQLAlchemy setup with session management
-- ✅ ORM models (User, Week, Movie, Album, WeekMovie, WeekAlbum, Person, MovieCast, MovieCrew)
+- ✅ ORM models (User, Week, Movie, Album, WeekMovie, WeekAlbum, Person, MovieCast, MovieCrew, Artist, AlbumArtist)
 - ✅ Alembic migration setup with async support
 - ✅ Database migrations
 - ✅ Database session dependency (`get_db`)
@@ -550,6 +553,7 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ Movie search and details endpoints
 - ✅ Movie credits endpoint (cast & crew)
 - ✅ Album search and details endpoints
+- ✅ Album credits endpoint (artist details)
 - ✅ Caching layer for external API responses
 - ✅ Week CRUD endpoints
 - ✅ Add/remove movie to week endpoints
@@ -564,7 +568,6 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ API documentation (auto-generated OpenAPI at `/docs`)
 
 ### Not Started (Phase 8+)
-- ❌ Album artist details (MusicBrainz artist data)
 - ❌ Statistics/analytics endpoints
 - ❌ Export functionality (CSV, JSON)
 

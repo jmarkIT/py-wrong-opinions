@@ -422,9 +422,7 @@ class TestGetMovieCredits:
             with pytest.raises(NotFoundError):
                 await tmdb_client.get_movie_credits(99999999)
 
-    async def test_get_movie_credits_or_none_returns_none(
-        self, tmdb_client: TMDBClient
-    ) -> None:
+    async def test_get_movie_credits_or_none_returns_none(self, tmdb_client: TMDBClient) -> None:
         """Test get_movie_credits_or_none returns None for non-existent movie."""
         mock_response = httpx.Response(404, json={"status_code": 34})
 
@@ -437,9 +435,7 @@ class TestGetMovieCredits:
 
             assert result is None
 
-    async def test_get_movie_credits_or_none_returns_credits(
-        self, tmdb_client: TMDBClient
-    ) -> None:
+    async def test_get_movie_credits_or_none_returns_credits(self, tmdb_client: TMDBClient) -> None:
         """Test get_movie_credits_or_none returns credits when found."""
         mock_response = httpx.Response(200, json=SAMPLE_CREDITS_RESPONSE)
 

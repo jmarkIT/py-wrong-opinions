@@ -169,9 +169,7 @@ async def get_movie_credits(
             # Load person data for cast
             cast_members = []
             for mc in cached_cast:
-                person_result = await db.execute(
-                    select(Person).where(Person.id == mc.person_id)
-                )
+                person_result = await db.execute(select(Person).where(Person.id == mc.person_id))
                 person = person_result.scalar_one()
                 cast_members.append(
                     CastMember(
@@ -186,9 +184,7 @@ async def get_movie_credits(
             # Load person data for crew
             crew_members = []
             for mc in cached_crew:
-                person_result = await db.execute(
-                    select(Person).where(Person.id == mc.person_id)
-                )
+                person_result = await db.execute(select(Person).where(Person.id == mc.person_id))
                 person = person_result.scalar_one()
                 crew_members.append(
                     CrewMember(
@@ -224,9 +220,7 @@ async def get_movie_credits(
         # Cache cast members
         for cast_data in credits.cast[:limit]:
             # Get or create person
-            person_result = await db.execute(
-                select(Person).where(Person.tmdb_id == cast_data.id)
-            )
+            person_result = await db.execute(select(Person).where(Person.tmdb_id == cast_data.id))
             person = person_result.scalar_one_or_none()
 
             if not person:
@@ -256,9 +250,7 @@ async def get_movie_credits(
 
         for crew_data in filtered_crew:
             # Get or create person
-            person_result = await db.execute(
-                select(Person).where(Person.tmdb_id == crew_data.id)
-            )
+            person_result = await db.execute(select(Person).where(Person.tmdb_id == crew_data.id))
             person = person_result.scalar_one_or_none()
 
             if not person:

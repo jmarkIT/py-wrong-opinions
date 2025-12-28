@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from wrong_opinions.database import get_db
 from wrong_opinions.models.album import Album
-from wrong_opinions.schemas.album import AlbumDetails, AlbumSearchResponse, AlbumSearchResult
+from wrong_opinions.models.artist import AlbumArtist, Artist
+from wrong_opinions.schemas.album import (
+    AlbumCredits,
+    AlbumDetails,
+    AlbumSearchResponse,
+    AlbumSearchResult,
+    ArtistCredit,
+)
 from wrong_opinions.services.base import NotFoundError
 from wrong_opinions.services.musicbrainz import MusicBrainzClient, get_musicbrainz_client
 
@@ -133,6 +140,127 @@ async def get_album(
             cover_art_url=musicbrainz_client.get_cover_art_front_url(release.id),
             cached=False,
         )
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Album not found") from None
+    finally:
+        await musicbrainz_client.close()
+
+
+@router.get("/{musicbrainz_id}/credits", response_model=AlbumCredits)
+async def get_album_credits(
+    musicbrainz_id: str,
+    limit: int = Query(10, ge=1, le=50, description="Max number of artists to return"),
+    db: AsyncSession = Depends(get_db),
+    musicbrainz_client: MusicBrainzClient = Depends(get_musicbrainz_client),
+) -> AlbumCredits:
+    """Get artist credits for an album.
+
+    First checks local cache, then fetches from MusicBrainz if not cached.
+    Caches the result in the local database for future requests.
+    """
+    # Check if we have the album in the database
+    result = await db.execute(select(Album).where(Album.musicbrainz_id == musicbrainz_id))
+    cached_album = result.scalar_one_or_none()
+
+    if cached_album:
+        # Check if we have cached artist credits for this album
+        artists_result = await db.execute(
+            select(AlbumArtist)
+            .where(AlbumArtist.album_id == cached_album.id)
+            .order_by(AlbumArtist.order)
+            .limit(limit)
+        )
+        cached_artists = artists_result.scalars().all()
+
+        if cached_artists:
+            # Load artist data
+            artist_credits = []
+            for aa in cached_artists:
+                artist_result = await db.execute(select(Artist).where(Artist.id == aa.artist_id))
+                artist = artist_result.scalar_one()
+                artist_credits.append(
+                    ArtistCredit(
+                        musicbrainz_id=artist.musicbrainz_id,
+                        name=artist.name,
+                        sort_name=artist.sort_name,
+                        disambiguation=artist.disambiguation,
+                        artist_type=artist.artist_type,
+                        country=artist.country,
+                        join_phrase=aa.join_phrase,
+                        order=aa.order,
+                    )
+                )
+
+            return AlbumCredits(artists=artist_credits)
+
+    # Fetch from MusicBrainz with full artist credits
+    try:
+        release = await musicbrainz_client.get_release(musicbrainz_id, include_artist_credits=True)
+
+        # If album doesn't exist yet, fetch and cache it first
+        if not cached_album:
+            cached_album = Album(
+                musicbrainz_id=release.id,
+                title=release.title,
+                artist=release.artist_name or "Unknown Artist",
+                release_date=_parse_musicbrainz_date(release.date),
+                cover_art_url=musicbrainz_client.get_cover_art_front_url(release.id),
+                cached_at=datetime.now(UTC),
+            )
+            db.add(cached_album)
+            await db.flush()  # Flush to get the album ID
+
+        # Cache artist credits
+        artist_credits = []
+        for order, credit in enumerate(release.artist_credit[:limit]):
+            # Skip credits without full artist info
+            if not credit.artist:
+                continue
+
+            # Get or create artist
+            artist_result = await db.execute(
+                select(Artist).where(Artist.musicbrainz_id == credit.artist.id)
+            )
+            artist = artist_result.scalar_one_or_none()
+
+            if not artist:
+                artist = Artist(
+                    musicbrainz_id=credit.artist.id,
+                    name=credit.artist.name,
+                    sort_name=credit.artist.sort_name,
+                    disambiguation=credit.artist.disambiguation,
+                    artist_type=credit.artist.type,
+                    country=credit.artist.country,
+                    cached_at=datetime.now(UTC),
+                )
+                db.add(artist)
+                await db.flush()
+
+            # Add album-artist association
+            album_artist = AlbumArtist(
+                album_id=cached_album.id,
+                artist_id=artist.id,
+                join_phrase=credit.joinphrase,
+                order=order,
+                cached_at=datetime.now(UTC),
+            )
+            db.add(album_artist)
+
+            artist_credits.append(
+                ArtistCredit(
+                    musicbrainz_id=credit.artist.id,
+                    name=credit.artist.name,
+                    sort_name=credit.artist.sort_name,
+                    disambiguation=credit.artist.disambiguation,
+                    artist_type=credit.artist.type,
+                    country=credit.artist.country,
+                    join_phrase=credit.joinphrase,
+                    order=order,
+                )
+            )
+
+        return AlbumCredits(artists=artist_credits)
+
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Album not found") from None
     finally:
