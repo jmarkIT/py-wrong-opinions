@@ -6,6 +6,7 @@ from wrong_opinions.services.base import (
     NotFoundError,
     RateLimitError,
 )
+from wrong_opinions.services.musicbrainz import MusicBrainzClient, get_musicbrainz_client
 from wrong_opinions.services.tmdb import TMDBClient, get_tmdb_client
 
 __all__ = [
@@ -15,4 +16,6 @@ __all__ = [
     "RateLimitError",
     "TMDBClient",
     "get_tmdb_client",
+    "MusicBrainzClient",
+    "get_musicbrainz_client",
 ]

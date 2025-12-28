@@ -57,7 +57,15 @@ class TMDBMovieDetails(BaseModel):
     homepage: str | None = Field(default=None, description="Official homepage URL")
 
 
-# MusicBrainz Schemas (placeholder for future implementation)
+# MusicBrainz Schemas
+class MusicBrainzArtistCredit(BaseModel):
+    """Artist credit information from MusicBrainz."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(description="Artist name")
+
+
 class MusicBrainzReleaseResult(BaseModel):
     """A single release/album result from MusicBrainz search."""
 
@@ -65,11 +73,21 @@ class MusicBrainzReleaseResult(BaseModel):
 
     id: str = Field(description="MusicBrainz release ID (UUID)")
     title: str = Field(description="Album/release title")
-    artist_credit: str | None = Field(default=None, description="Artist credit string")
-    release_date: date | None = Field(default=None, description="Release date")
+    score: int = Field(default=0, description="Search relevance score")
     country: str | None = Field(default=None, description="Release country")
     status: str | None = Field(default=None, description="Release status")
-    score: int = Field(default=0, description="Search relevance score")
+    date: str | None = Field(default=None, description="Release date (YYYY-MM-DD)")
+    barcode: str | None = Field(default=None, description="Barcode")
+    artist_credit: list[MusicBrainzArtistCredit] = Field(
+        default_factory=list, alias="artist-credit", description="Artist credits"
+    )
+
+    @property
+    def artist_name(self) -> str | None:
+        """Get the primary artist name."""
+        if self.artist_credit:
+            return self.artist_credit[0].name
+        return None
 
 
 class MusicBrainzSearchResponse(BaseModel):
@@ -82,3 +100,26 @@ class MusicBrainzSearchResponse(BaseModel):
     releases: list[MusicBrainzReleaseResult] = Field(
         default_factory=list, description="Release results"
     )
+
+
+class MusicBrainzReleaseDetails(BaseModel):
+    """Detailed release information from MusicBrainz."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(description="MusicBrainz release ID (UUID)")
+    title: str = Field(description="Album/release title")
+    status: str | None = Field(default=None, description="Release status")
+    country: str | None = Field(default=None, description="Release country")
+    date: str | None = Field(default=None, description="Release date (YYYY-MM-DD)")
+    barcode: str | None = Field(default=None, description="Barcode")
+    artist_credit: list[MusicBrainzArtistCredit] = Field(
+        default_factory=list, alias="artist-credit", description="Artist credits"
+    )
+
+    @property
+    def artist_name(self) -> str | None:
+        """Get the primary artist name."""
+        if self.artist_credit:
+            return self.artist_credit[0].name
+        return None

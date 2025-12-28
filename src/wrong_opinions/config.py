@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     tmdb_base_url: str = "https://api.themoviedb.org/3"
 
     # MusicBrainz
+    musicbrainz_base_url: str = "https://musicbrainz.org/ws/2"
     musicbrainz_user_agent: str = "WrongOpinions/1.0 (contact@example.com)"
 
 
