@@ -274,3 +274,218 @@ class TestDateParsing:
 
         result = _parse_musicbrainz_date("invalid")
         assert result is None
+
+
+# Sample data for album credits tests
+SAMPLE_RELEASE_WITH_CREDITS = MusicBrainzReleaseDetails.model_validate(
+    {
+        "id": "abc-123-uuid",
+        "title": "The Dark Side of the Moon",
+        "status": "Official",
+        "country": "GB",
+        "date": "1973-03-01",
+        "barcode": "077774644426",
+        "artist-credit": [
+            {
+                "name": "Pink Floyd",
+                "joinphrase": "",
+                "artist": {
+                    "id": "artist-uuid-1",
+                    "name": "Pink Floyd",
+                    "sort-name": "Pink Floyd",
+                    "disambiguation": "UK rock band",
+                    "type": "Group",
+                    "country": "GB",
+                },
+            }
+        ],
+    }
+)
+
+SAMPLE_RELEASE_WITH_MULTIPLE_ARTISTS = MusicBrainzReleaseDetails.model_validate(
+    {
+        "id": "collab-uuid",
+        "title": "Watch the Throne",
+        "status": "Official",
+        "country": "US",
+        "date": "2011-08-08",
+        "barcode": None,
+        "artist-credit": [
+            {
+                "name": "Jay-Z",
+                "joinphrase": " & ",
+                "artist": {
+                    "id": "artist-uuid-jay",
+                    "name": "Jay-Z",
+                    "sort-name": "Jay-Z",
+                    "disambiguation": None,
+                    "type": "Person",
+                    "country": "US",
+                },
+            },
+            {
+                "name": "Kanye West",
+                "joinphrase": "",
+                "artist": {
+                    "id": "artist-uuid-kanye",
+                    "name": "Kanye West",
+                    "sort-name": "West, Kanye",
+                    "disambiguation": None,
+                    "type": "Person",
+                    "country": "US",
+                },
+            },
+        ],
+    }
+)
+
+
+class TestGetAlbumCredits:
+    """Tests for album credits endpoint."""
+
+    async def test_get_album_credits_success(
+        self,
+        client: AsyncClient,
+        mock_musicbrainz_client: MagicMock,
+        mock_db_session: AsyncMock,
+    ) -> None:
+        """Test successful album credits fetch from API."""
+        mock_musicbrainz_client.get_release = AsyncMock(
+            return_value=SAMPLE_RELEASE_WITH_CREDITS
+        )
+
+        # Mock scalars().all() to return empty list (no cached artists)
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None  # Album not cached
+        mock_result.scalars.return_value = mock_scalars
+        mock_db_session.execute = AsyncMock(return_value=mock_result)
+        mock_db_session.flush = AsyncMock()
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.get("/api/albums/abc-123-uuid/credits")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "artists" in data
+            assert len(data["artists"]) == 1
+            assert data["artists"][0]["musicbrainz_id"] == "artist-uuid-1"
+            assert data["artists"][0]["name"] == "Pink Floyd"
+            assert data["artists"][0]["artist_type"] == "Group"
+            assert data["artists"][0]["country"] == "GB"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_album_credits_multiple_artists(
+        self,
+        client: AsyncClient,
+        mock_musicbrainz_client: MagicMock,
+        mock_db_session: AsyncMock,
+    ) -> None:
+        """Test album credits with multiple artists (collaboration)."""
+        mock_musicbrainz_client.get_release = AsyncMock(
+            return_value=SAMPLE_RELEASE_WITH_MULTIPLE_ARTISTS
+        )
+
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_result.scalars.return_value = mock_scalars
+        mock_db_session.execute = AsyncMock(return_value=mock_result)
+        mock_db_session.flush = AsyncMock()
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.get("/api/albums/collab-uuid/credits")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["artists"]) == 2
+            assert data["artists"][0]["name"] == "Jay-Z"
+            assert data["artists"][0]["join_phrase"] == " & "
+            assert data["artists"][0]["order"] == 0
+            assert data["artists"][1]["name"] == "Kanye West"
+            assert data["artists"][1]["order"] == 1
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_album_credits_not_found(
+        self,
+        client: AsyncClient,
+        mock_musicbrainz_client: MagicMock,
+        mock_db_session: AsyncMock,
+    ) -> None:
+        """Test album credits fetch for non-existent album."""
+        from wrong_opinions.services.base import NotFoundError
+
+        mock_musicbrainz_client.get_release.side_effect = NotFoundError("Album not found")
+
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_result.scalars.return_value = mock_scalars
+        mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.get("/api/albums/invalid-uuid/credits")
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "Album not found"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_album_credits_with_limit(
+        self,
+        client: AsyncClient,
+        mock_musicbrainz_client: MagicMock,
+        mock_db_session: AsyncMock,
+    ) -> None:
+        """Test album credits with limit parameter."""
+        mock_musicbrainz_client.get_release = AsyncMock(
+            return_value=SAMPLE_RELEASE_WITH_MULTIPLE_ARTISTS
+        )
+
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_result.scalars.return_value = mock_scalars
+        mock_db_session.execute = AsyncMock(return_value=mock_result)
+        mock_db_session.flush = AsyncMock()
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.get("/api/albums/collab-uuid/credits?limit=1")
+
+            assert response.status_code == 200
+            data = response.json()
+            # Only 1 artist returned due to limit
+            assert len(data["artists"]) == 1
+            assert data["artists"][0]["name"] == "Jay-Z"
+        finally:
+            app.dependency_overrides.clear()

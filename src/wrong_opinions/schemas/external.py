@@ -94,12 +94,27 @@ class TMDBCreditsResponse(BaseModel):
 
 
 # MusicBrainz Schemas
+class MusicBrainzArtist(BaseModel):
+    """Artist information from MusicBrainz."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(description="MusicBrainz artist ID (UUID)")
+    name: str = Field(description="Artist name")
+    sort_name: str | None = Field(default=None, alias="sort-name", description="Sort name")
+    disambiguation: str | None = Field(default=None, description="Disambiguation info")
+    type: str | None = Field(default=None, description="Artist type (Person, Group, etc.)")
+    country: str | None = Field(default=None, description="Artist country")
+
+
 class MusicBrainzArtistCredit(BaseModel):
     """Artist credit information from MusicBrainz."""
 
     model_config = ConfigDict(extra="ignore")
 
-    name: str = Field(description="Artist name")
+    name: str = Field(description="Credited artist name")
+    joinphrase: str | None = Field(default=None, description="Join phrase")
+    artist: MusicBrainzArtist | None = Field(default=None, description="Full artist details")
 
 
 class MusicBrainzReleaseResult(BaseModel):
@@ -122,7 +137,9 @@ class MusicBrainzReleaseResult(BaseModel):
     def artist_name(self) -> str | None:
         """Get the primary artist name."""
         if self.artist_credit:
-            return self.artist_credit[0].name
+            credit = self.artist_credit[0]
+            # Use credited name, falling back to artist.name if available
+            return credit.name
         return None
 
 

@@ -80,11 +80,13 @@ class MusicBrainzClient(BaseAPIClient):
     async def get_release(
         self,
         release_id: str,
+        include_artist_credits: bool = False,
     ) -> MusicBrainzReleaseDetails:
         """Get detailed information about a specific release.
 
         Args:
             release_id: MusicBrainz release ID (UUID).
+            include_artist_credits: If True, include full artist credit information.
 
         Returns:
             Detailed release information.
@@ -92,24 +94,28 @@ class MusicBrainzClient(BaseAPIClient):
         Raises:
             NotFoundError: If the release is not found.
         """
-        params = {"fmt": "json"}  # Required for JSON response
+        params: dict[str, Any] = {"fmt": "json"}  # Required for JSON response
+        if include_artist_credits:
+            params["inc"] = "artist-credits"
         data = await self.get(f"/release/{release_id}", params=params)
         return MusicBrainzReleaseDetails.model_validate(data)
 
     async def get_release_or_none(
         self,
         release_id: str,
+        include_artist_credits: bool = False,
     ) -> MusicBrainzReleaseDetails | None:
         """Get release details, returning None if not found.
 
         Args:
             release_id: MusicBrainz release ID (UUID).
+            include_artist_credits: If True, include full artist credit information.
 
         Returns:
             Release details or None if not found.
         """
         try:
-            return await self.get_release(release_id)
+            return await self.get_release(release_id, include_artist_credits)
         except NotFoundError:
             return None
 
