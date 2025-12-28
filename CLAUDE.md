@@ -72,9 +72,10 @@ py-wrong-opinions/
 - **Ruff 0.8+** - Linting and formatting (replaces black, isort, flake8)
 - **pytest-cov 6.0+** - Coverage reporting
 
-### Authentication (planned)
-- **python-jose** - JWT token handling
+### Authentication (installed, not yet implemented)
+- **python-jose[cryptography]** - JWT token handling
 - **passlib[bcrypt]** - Password hashing
+- **python-multipart** - Form data parsing for login endpoints
 
 ## Development Setup
 
@@ -124,7 +125,15 @@ uv add --dev <package-name>      # Dev dependency
 ### Configuration Management
 - **Pattern**: Pydantic Settings with `.env` file
 - **Location**: `src/wrong_opinions/config.py`
-- **Usage**: `settings = get_settings()` (cached singleton)
+- **Usage**: `settings = get_settings()` (cached singleton via `@lru_cache`)
+- **Available settings**:
+  - `app_name` - Application name (default: "Wrong Opinions API")
+  - `debug` - Debug mode flag (default: False)
+  - `secret_key` - Secret key for security (default: "change-me-in-production")
+  - `database_url` - Database connection URL (default: SQLite)
+  - `tmdb_api_key` - TMDB API key (default: empty)
+  - `tmdb_base_url` - TMDB base URL
+  - `musicbrainz_user_agent` - MusicBrainz User-Agent header
 - **Example**:
   ```python
   from wrong_opinions.config import get_settings
@@ -213,22 +222,36 @@ uv add --dev <package-name>      # Dev dependency
 
 ## Database Conventions
 
-### Models (when created)
+### Models
 - Inherit from `Base` class in `wrong_opinions.database`
-- Use SQLAlchemy 2.0 style (mapped_column)
+- Use SQLAlchemy 2.0 style (`Mapped`, `mapped_column`)
 - File location: `src/wrong_opinions/models/<entity>.py`
+- Export from `src/wrong_opinions/models/__init__.py`
 - Timestamps: `created_at`, `updated_at` where applicable
-- Example structure:
+- Relationships: Use `relationship()` with `back_populates`
+- Example structure (matching actual codebase style):
   ```python
-  from sqlalchemy.orm import Mapped, mapped_column
+  from datetime import datetime
+
+  from sqlalchemy import String
+  from sqlalchemy.orm import Mapped, mapped_column, relationship
+
   from wrong_opinions.database import Base
 
   class User(Base):
+      """User model for authentication and profile data."""
+
       __tablename__ = "users"
 
       id: Mapped[int] = mapped_column(primary_key=True)
-      username: Mapped[str] = mapped_column(unique=True)
+      username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+      email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+      hashed_password: Mapped[str] = mapped_column(String(255))
+      is_active: Mapped[bool] = mapped_column(default=True)
       created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+      # Relationships
+      weeks: Mapped[list["Week"]] = relationship(back_populates="user")
   ```
 
 ### Schemas (Pydantic)
@@ -247,7 +270,9 @@ uv add --dev <package-name>      # Dev dependency
 
 ### Test Fixtures
 - Shared fixtures in `tests/conftest.py`
-- Available fixture: `client` (AsyncClient for API testing)
+- Available fixtures:
+  - `client` (AsyncClient for API testing)
+  - `anyio_backend` (returns "asyncio" for async test support)
 - Database fixtures (to be added): `db_session`, `test_db`
 
 ### Test Coverage
@@ -404,6 +429,27 @@ uv run alembic downgrade -1
 
 # View migration history
 uv run alembic history
+
+# Check current database revision
+uv run alembic current
+```
+
+### Verifying Setup
+```bash
+# Verify dependencies are installed
+uv sync
+
+# Check linting passes
+uv run ruff check .
+
+# Check formatting
+uv run ruff format --check .
+
+# Run all tests
+uv run pytest -v
+
+# Verify app starts (Ctrl+C to stop)
+uv run fastapi dev src/wrong_opinions/main.py
 ```
 
 ## Things to Avoid
@@ -445,7 +491,8 @@ uv run alembic history
 | `src/wrong_opinions/database.py` | Database setup | Async engine, session factory, `get_db` dependency |
 | `src/wrong_opinions/models/` | ORM models | User, Week, Movie, Album, WeekMovie, WeekAlbum |
 | `alembic.ini` | Alembic config | Migration settings, ruff post-write hooks |
-| `migrations/env.py` | Migration environment | Async support, imports models from settings |
+| `migrations/env.py` | Migration environment | Async support, imports all models |
+| `migrations/versions/` | Migration files | Initial schema: `51cbe403ade8_initial_schema_with_all_models.py` |
 | `tests/conftest.py` | Test fixtures | `client` fixture for API testing |
 | `ARCHITECTURE.md` | Detailed plan | Complete data models, endpoints, implementation phases |
 | `.env.example` | Environment template | Copy to `.env` and fill in secrets |
