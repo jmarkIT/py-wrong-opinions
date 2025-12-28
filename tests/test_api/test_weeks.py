@@ -8,9 +8,11 @@ from httpx import AsyncClient
 
 from wrong_opinions.database import get_db
 from wrong_opinions.main import app
+from wrong_opinions.models.album import Album
 from wrong_opinions.models.movie import Movie
 from wrong_opinions.models.user import User
-from wrong_opinions.models.week import Week, WeekMovie
+from wrong_opinions.models.week import Week, WeekAlbum, WeekMovie
+from wrong_opinions.services.musicbrainz import get_musicbrainz_client
 from wrong_opinions.services.tmdb import get_tmdb_client
 
 
@@ -769,6 +771,373 @@ class TestRemoveMovieFromWeek:
 
         try:
             response = await client.delete("/api/weeks/1/movies/3")
+
+            assert response.status_code == 400
+            assert "Position must be 1 or 2" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+
+def create_mock_album(
+    id: int = 1,
+    musicbrainz_id: str = "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f",
+    title: str = "OK Computer",
+    artist: str = "Radiohead",
+    release_date=None,
+    cover_art_url: str
+    | None = "https://coverartarchive.org/release/a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f/front",
+) -> MagicMock:
+    """Create a mock Album object."""
+    mock_album = MagicMock(spec=Album)
+    mock_album.id = id
+    mock_album.musicbrainz_id = musicbrainz_id
+    mock_album.title = title
+    mock_album.artist = artist
+    mock_album.release_date = release_date
+    mock_album.cover_art_url = cover_art_url
+    mock_album.cached_at = datetime(2025, 1, 1, 12, 0, 0)
+    return mock_album
+
+
+def create_mock_week_album(
+    week_id: int = 1,
+    album_id: int = 1,
+    position: int = 1,
+) -> MagicMock:
+    """Create a mock WeekAlbum object."""
+    mock_week_album = MagicMock(spec=WeekAlbum)
+    mock_week_album.id = 1
+    mock_week_album.week_id = week_id
+    mock_week_album.album_id = album_id
+    mock_week_album.position = position
+    mock_week_album.added_at = datetime(2025, 1, 1, 12, 0, 0)
+    return mock_week_album
+
+
+@pytest.fixture
+def mock_musicbrainz_client():
+    """Create a mock MusicBrainz client."""
+    mock_client = AsyncMock()
+    mock_client.close = AsyncMock()
+
+    # Create a mock release response
+    mock_release_response = MagicMock()
+    mock_release_response.id = "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f"
+    mock_release_response.title = "OK Computer"
+    mock_release_response.artist_credit = "Radiohead"
+    mock_release_response.date = "1997-05-21"
+
+    mock_client.get_release = AsyncMock(return_value=mock_release_response)
+    mock_client.get_cover_art_front_url = MagicMock(
+        return_value="https://coverartarchive.org/release/a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f/front"
+    )
+    return mock_client
+
+
+class TestAddAlbumToWeek:
+    """Tests for add album to week endpoint."""
+
+    async def test_add_album_success_from_cache(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+    ) -> None:
+        """Test successfully adding a cached album to a week."""
+        mock_week = create_mock_week(id=1)
+        mock_album = create_mock_album(id=1)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock position check - no existing album at position
+        position_result = MagicMock()
+        position_result.scalar_one_or_none.return_value = None
+
+        # Mock album lookup - album exists in cache
+        album_result = MagicMock()
+        album_result.scalar_one_or_none.return_value = mock_album
+
+        mock_db_session.execute = AsyncMock(
+            side_effect=[week_result, position_result, album_result]
+        )
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_musicbrainz_client():
+            return mock_musicbrainz_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/1/albums",
+                json={"musicbrainz_id": "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f", "position": 1},
+            )
+
+            assert response.status_code == 201
+            data = response.json()
+            assert data["week_id"] == 1
+            assert data["position"] == 1
+            assert data["album"]["musicbrainz_id"] == "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f"
+            assert data["album"]["title"] == "OK Computer"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_add_album_success_from_musicbrainz(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+    ) -> None:
+        """Test successfully adding an album fetched from MusicBrainz."""
+        mock_week = create_mock_week(id=1)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock position check - no existing album at position
+        position_result = MagicMock()
+        position_result.scalar_one_or_none.return_value = None
+
+        # Mock album lookup - album not in cache
+        album_result = MagicMock()
+        album_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(
+            side_effect=[week_result, position_result, album_result]
+        )
+
+        # Track added album
+        added_album = None
+
+        def capture_add(obj):
+            nonlocal added_album
+            if isinstance(obj, MagicMock):
+                # This is a WeekAlbum
+                pass
+            else:
+                added_album = obj
+
+        mock_db_session.add = MagicMock(side_effect=capture_add)
+
+        async def mock_flush():
+            if added_album:
+                added_album.id = 1
+                added_album.cached_at = datetime(2025, 1, 1, 12, 0, 0)
+
+        mock_db_session.flush = AsyncMock(side_effect=mock_flush)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_musicbrainz_client():
+            return mock_musicbrainz_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/1/albums",
+                json={"musicbrainz_id": "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f", "position": 1},
+            )
+
+            assert response.status_code == 201
+            data = response.json()
+            assert data["week_id"] == 1
+            assert data["position"] == 1
+            assert data["album"]["musicbrainz_id"] == "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_add_album_week_not_found(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+    ) -> None:
+        """Test adding an album to a non-existent week."""
+        # Mock week lookup - week not found
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(return_value=week_result)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_musicbrainz_client():
+            return mock_musicbrainz_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/999/albums",
+                json={"musicbrainz_id": "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f", "position": 1},
+            )
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "Week not found"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_add_album_position_occupied(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+    ) -> None:
+        """Test adding an album to an already occupied position."""
+        mock_week = create_mock_week(id=1)
+        existing_week_album = create_mock_week_album(position=1)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock position check - position is occupied
+        position_result = MagicMock()
+        position_result.scalar_one_or_none.return_value = existing_week_album
+
+        mock_db_session.execute = AsyncMock(side_effect=[week_result, position_result])
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_musicbrainz_client():
+            return mock_musicbrainz_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/1/albums",
+                json={"musicbrainz_id": "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f", "position": 1},
+            )
+
+            assert response.status_code == 409
+            assert "already occupied" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_add_album_invalid_position(
+        self, client: AsyncClient, mock_db_session: AsyncMock, mock_musicbrainz_client: AsyncMock
+    ) -> None:
+        """Test adding an album with invalid position."""
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_musicbrainz_client():
+            return mock_musicbrainz_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+
+        try:
+            response = await client.post(
+                "/api/weeks/1/albums",
+                json={"musicbrainz_id": "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f", "position": 3},
+            )
+
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
+
+
+class TestRemoveAlbumFromWeek:
+    """Tests for remove album from week endpoint."""
+
+    async def test_remove_album_success(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test successfully removing an album from a week."""
+        mock_week = create_mock_week(id=1)
+        mock_week_album = create_mock_week_album(week_id=1, position=1)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock week_album lookup
+        week_album_result = MagicMock()
+        week_album_result.scalar_one_or_none.return_value = mock_week_album
+
+        mock_db_session.execute = AsyncMock(side_effect=[week_result, week_album_result])
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.delete("/api/weeks/1/albums/1")
+
+            assert response.status_code == 204
+            mock_db_session.delete.assert_called_once_with(mock_week_album)
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_remove_album_week_not_found(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test removing an album from a non-existent week."""
+        # Mock week lookup - week not found
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(return_value=week_result)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.delete("/api/weeks/999/albums/1")
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "Week not found"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_remove_album_not_found(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test removing an album that doesn't exist at position."""
+        mock_week = create_mock_week(id=1)
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock week_album lookup - not found
+        week_album_result = MagicMock()
+        week_album_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(side_effect=[week_result, week_album_result])
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.delete("/api/weeks/1/albums/1")
+
+            assert response.status_code == 404
+            assert "No album found at position" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_remove_album_invalid_position(
+        self, client: AsyncClient, mock_db_session: AsyncMock
+    ) -> None:
+        """Test removing an album with invalid position."""
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        try:
+            response = await client.delete("/api/weeks/1/albums/3")
 
             assert response.status_code == 400
             assert "Position must be 1 or 2" in response.json()["detail"]
