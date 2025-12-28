@@ -270,10 +270,10 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 
 ### Phase 2: Database Foundation
 - [x] Set up SQLAlchemy with async support
-- [ ] Create all ORM models
-- [ ] Configure Alembic for migrations
-- [ ] Create initial migration
-- [ ] Add database session dependency for FastAPI
+- [x] Create all ORM models
+- [x] Configure Alembic for migrations
+- [x] Create initial migration
+- [x] Add database session dependency for FastAPI
 
 ### Phase 3: External API Clients
 - [ ] Implement TMDB client service
