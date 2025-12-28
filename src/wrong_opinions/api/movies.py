@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from wrong_opinions.database import get_db
 from wrong_opinions.models.movie import Movie
 from wrong_opinions.schemas.movie import MovieDetails, MovieSearchResponse, MovieSearchResult
-from wrong_opinions.services.base import APIError, NotFoundError
+from wrong_opinions.services.base import NotFoundError
 from wrong_opinions.services.tmdb import TMDBClient, get_tmdb_client
 
 router = APIRouter(prefix="/movies", tags=["movies"])
@@ -25,6 +25,7 @@ async def search_movies(
     """Search for movies using TMDB.
 
     Returns a list of movies matching the search query.
+    APIError exceptions are handled globally by the application.
     """
     try:
         response = await tmdb_client.search_movies(query=query, page=page, year=year)
@@ -48,8 +49,6 @@ async def search_movies(
             total_results=response.total_results,
             results=results,
         )
-    except APIError as e:
-        raise HTTPException(status_code=e.status_code or 500, detail=str(e)) from e
     finally:
         await tmdb_client.close()
 
@@ -88,6 +87,7 @@ async def get_movie(
         )
 
     # Fetch from TMDB
+    # APIError exceptions (except NotFoundError) are handled globally
     try:
         movie = await tmdb_client.get_movie(tmdb_id)
 
@@ -120,9 +120,7 @@ async def get_movie(
             imdb_id=movie.imdb_id,
             cached=False,
         )
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail="Movie not found") from e
-    except APIError as e:
-        raise HTTPException(status_code=e.status_code or 500, detail=str(e)) from e
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Movie not found") from None
     finally:
         await tmdb_client.close()

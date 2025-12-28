@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from wrong_opinions.database import get_db
 from wrong_opinions.models.album import Album
 from wrong_opinions.schemas.album import AlbumDetails, AlbumSearchResponse, AlbumSearchResult
-from wrong_opinions.services.base import APIError, NotFoundError
+from wrong_opinions.services.base import NotFoundError
 from wrong_opinions.services.musicbrainz import MusicBrainzClient, get_musicbrainz_client
 
 router = APIRouter(prefix="/albums", tags=["albums"])
@@ -50,6 +50,7 @@ async def search_albums(
 
     Returns a list of albums matching the search query.
     Note: MusicBrainz has a rate limit of 1 request per second.
+    APIError exceptions are handled globally by the application.
     """
     try:
         response = await musicbrainz_client.search_releases(query=query, limit=limit, offset=offset)
@@ -72,8 +73,6 @@ async def search_albums(
             offset=response.offset,
             results=results,
         )
-    except APIError as e:
-        raise HTTPException(status_code=e.status_code or 500, detail=str(e)) from e
     finally:
         await musicbrainz_client.close()
 
@@ -108,6 +107,7 @@ async def get_album(
         )
 
     # Fetch from MusicBrainz
+    # APIError exceptions (except NotFoundError) are handled globally
     try:
         release = await musicbrainz_client.get_release(musicbrainz_id)
 
@@ -133,9 +133,7 @@ async def get_album(
             cover_art_url=musicbrainz_client.get_cover_art_front_url(release.id),
             cached=False,
         )
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail="Album not found") from e
-    except APIError as e:
-        raise HTTPException(status_code=e.status_code or 500, detail=str(e)) from e
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Album not found") from None
     finally:
         await musicbrainz_client.close()
