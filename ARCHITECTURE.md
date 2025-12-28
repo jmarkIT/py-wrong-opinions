@@ -163,6 +163,65 @@ class WeekAlbum:
     # Constraints: unique(week_id, position)
 ```
 
+### Person
+Cached person data from TMDB (actors, directors, crew).
+```python
+class Person:
+    id: int (PK)
+    tmdb_id: int (unique)
+    name: str
+    profile_path: str | None
+    known_for_department: str | None  # Acting, Directing, etc.
+    cached_at: datetime
+```
+
+### MovieCast (Association)
+```python
+class MovieCast:
+    id: int (PK)
+    movie_id: int (FK -> Movie)
+    person_id: int (FK -> Person)
+    character: str | None  # Character name/role
+    order: int  # Billing order in credits
+    cached_at: datetime
+```
+
+### MovieCrew (Association)
+```python
+class MovieCrew:
+    id: int (PK)
+    movie_id: int (FK -> Movie)
+    person_id: int (FK -> Person)
+    department: str | None  # Directing, Writing, Sound, etc.
+    job: str | None  # Director, Writer, Composer, etc.
+    cached_at: datetime
+```
+
+### Artist
+Cached artist data from MusicBrainz.
+```python
+class Artist:
+    id: int (PK)
+    musicbrainz_id: str (unique, UUID)
+    name: str
+    sort_name: str | None
+    disambiguation: str | None
+    artist_type: str | None  # Person, Group, etc.
+    country: str | None  # ISO country code
+    cached_at: datetime
+```
+
+### AlbumArtist (Association)
+```python
+class AlbumArtist:
+    id: int (PK)
+    album_id: int (FK -> Album)
+    artist_id: int (FK -> Artist)
+    join_phrase: str | None  # e.g., " & ", " feat. "
+    order: int  # Order in credits list
+    cached_at: datetime
+```
+
 ---
 
 ## API Endpoints
@@ -196,6 +255,7 @@ class WeekAlbum:
 |--------|----------|-------------|
 | GET | `/api/movies/search` | Search TMDB for movies |
 | GET | `/api/movies/{tmdb_id}` | Get movie details from TMDB |
+| GET | `/api/movies/{tmdb_id}/credits` | Get movie cast & crew from TMDB |
 | POST | `/api/weeks/{week_id}/movies` | Add movie to week |
 | DELETE | `/api/weeks/{week_id}/movies/{position}` | Remove movie from week |
 
@@ -204,6 +264,7 @@ class WeekAlbum:
 |--------|----------|-------------|
 | GET | `/api/albums/search` | Search MusicBrainz for albums |
 | GET | `/api/albums/{musicbrainz_id}` | Get album details |
+| GET | `/api/albums/{musicbrainz_id}/credits` | Get album artist credits from MusicBrainz |
 | POST | `/api/weeks/{week_id}/albums` | Add album to week |
 | DELETE | `/api/weeks/{week_id}/albums/{position}` | Remove album from week |
 
@@ -321,10 +382,10 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
   - [x] **Step 1a:** Create `Person`, `MovieCast`, `MovieCrew` models
   - [x] **Step 1b:** Store actor names, roles, profile images
   - [x] **Step 1c:** Store director, writer, composer, etc.
-- [ ] **Step 2:** Album artist details - Pull full artist info from MusicBrainz
-  - [ ] **Step 2a:** Create `Artist` model with MusicBrainz artist ID
-  - [ ] **Step 2b:** Store artist bio, origin, active years
-  - [ ] **Step 2c:** Link albums to multiple artists (collaborations)
+- [x] **Step 2:** Album artist details - Pull full artist info from MusicBrainz
+  - [x] **Step 2a:** Create `Artist` model with MusicBrainz artist ID
+  - [x] **Step 2b:** Store artist name, type, disambiguation, country
+  - [x] **Step 2c:** Link albums to multiple artists (collaborations)
 - [ ] **Step 3:** Statistics/analytics endpoints
 - [ ] **Step 4:** Export functionality (CSV, JSON)
 - [ ] **Step 5:** Multiple users viewing each other's selections
