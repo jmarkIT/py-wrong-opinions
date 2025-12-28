@@ -18,6 +18,7 @@ This document provides comprehensive guidance for AI assistants working on the W
 - Phase 5: Week Selections - **COMPLETE**
 - Phase 6: Authentication - **COMPLETE**
 - Phase 7: Testing & Polish - **COMPLETE**
+- Phase 8 Step 1: Movie cast & crew data - **COMPLETE**
 
 **Target Users**: 2 users (small-scale personal project)
 
@@ -41,7 +42,8 @@ py-wrong-opinions/
 │   │   ├── user.py              # User model
 │   │   ├── week.py              # Week, WeekMovie, WeekAlbum models
 │   │   ├── movie.py             # Movie model
-│   │   └── album.py             # Album model
+│   │   ├── album.py             # Album model
+│   │   └── person.py            # Person, MovieCast, MovieCrew models
 │   ├── schemas/                 # Pydantic request/response schemas
 │   │   ├── __init__.py
 │   │   ├── movie.py             # Movie schemas
@@ -192,6 +194,7 @@ uv add --dev <package-name>      # Dev dependency
 - Available endpoints:
   - `/api/movies/search` - Search TMDB for movies
   - `/api/movies/{tmdb_id}` - Get movie details (cached)
+  - `/api/movies/{tmdb_id}/credits` - Get movie cast & crew (cached)
   - `/api/albums/search` - Search MusicBrainz for albums
   - `/api/albums/{musicbrainz_id}` - Get album details (cached)
   - `/api/weeks` - CRUD operations for week selections
@@ -530,7 +533,7 @@ uv run fastapi dev src/wrong_opinions/main.py
 
 ## Current Implementation Status
 
-### Completed (Phase 1-7)
+### Completed (Phase 1-8)
 - ✅ UV project setup with `pyproject.toml`
 - ✅ Project structure (all directories created)
 - ✅ FastAPI app with health check endpoint
@@ -538,13 +541,14 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ Ruff configuration for linting/formatting
 - ✅ Pytest configuration with async support
 - ✅ Async SQLAlchemy setup with session management
-- ✅ ORM models (User, Week, Movie, Album, WeekMovie, WeekAlbum)
+- ✅ ORM models (User, Week, Movie, Album, WeekMovie, WeekAlbum, Person, MovieCast, MovieCrew)
 - ✅ Alembic migration setup with async support
-- ✅ Initial database migration
+- ✅ Database migrations
 - ✅ Database session dependency (`get_db`)
-- ✅ TMDB API client with search and details
+- ✅ TMDB API client with search, details, and credits
 - ✅ MusicBrainz API client with rate limiting
 - ✅ Movie search and details endpoints
+- ✅ Movie credits endpoint (cast & crew)
 - ✅ Album search and details endpoints
 - ✅ Caching layer for external API responses
 - ✅ Week CRUD endpoints
@@ -560,7 +564,9 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ API documentation (auto-generated OpenAPI at `/docs`)
 
 ### Not Started (Phase 8+)
+- ❌ Album artist details (MusicBrainz artist data)
 - ❌ Statistics/analytics endpoints
+- ❌ Export functionality (CSV, JSON)
 
 ## Version Information
 

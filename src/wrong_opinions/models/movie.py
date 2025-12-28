@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from wrong_opinions.database import Base
 
 if TYPE_CHECKING:
+    from wrong_opinions.models.person import MovieCast, MovieCrew
     from wrong_opinions.models.week import WeekMovie
 
 
@@ -30,5 +31,11 @@ class Movie(Base):
 
     # Relationships
     week_movies: Mapped[list[WeekMovie]] = relationship(
+        back_populates="movie", cascade="all, delete-orphan"
+    )
+    cast: Mapped[list[MovieCast]] = relationship(
+        back_populates="movie", cascade="all, delete-orphan"
+    )
+    crew: Mapped[list[MovieCrew]] = relationship(
         back_populates="movie", cascade="all, delete-orphan"
     )

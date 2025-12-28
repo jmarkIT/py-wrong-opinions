@@ -4,6 +4,7 @@ from typing import Any
 
 from wrong_opinions.config import get_settings
 from wrong_opinions.schemas.external import (
+    TMDBCreditsResponse,
     TMDBMovieDetails,
     TMDBMovieResult,
     TMDBSearchResponse,
@@ -22,6 +23,7 @@ class TMDBClient(BaseAPIClient):
     IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
     POSTER_SIZES = ("w92", "w154", "w185", "w342", "w500", "w780", "original")
     BACKDROP_SIZES = ("w300", "w780", "w1280", "original")
+    PROFILE_SIZES = ("w45", "w185", "h632", "original")
 
     def __init__(
         self,
@@ -125,6 +127,46 @@ class TMDBClient(BaseAPIClient):
         except NotFoundError:
             return None
 
+    async def get_movie_credits(
+        self,
+        movie_id: int,
+        language: str = "en-US",
+    ) -> TMDBCreditsResponse:
+        """Get cast and crew for a specific movie.
+
+        Args:
+            movie_id: TMDB movie ID.
+            language: Response language code.
+
+        Returns:
+            Credits response containing cast and crew.
+
+        Raises:
+            NotFoundError: If the movie is not found.
+        """
+        params = {"language": language}
+        data = await self.get(f"/movie/{movie_id}/credits", params=params)
+        return TMDBCreditsResponse.model_validate(data)
+
+    async def get_movie_credits_or_none(
+        self,
+        movie_id: int,
+        language: str = "en-US",
+    ) -> TMDBCreditsResponse | None:
+        """Get movie credits, returning None if not found.
+
+        Args:
+            movie_id: TMDB movie ID.
+            language: Response language code.
+
+        Returns:
+            Credits response or None if not found.
+        """
+        try:
+            return await self.get_movie_credits(movie_id, language=language)
+        except NotFoundError:
+            return None
+
     def get_poster_url(
         self,
         poster_path: str | None,
@@ -168,6 +210,28 @@ class TMDBClient(BaseAPIClient):
             size = "w780"  # Default fallback
 
         return f"{self.IMAGE_BASE_URL}/{size}{backdrop_path}"
+
+    def get_profile_url(
+        self,
+        profile_path: str | None,
+        size: str = "w185",
+    ) -> str | None:
+        """Generate full profile image URL.
+
+        Args:
+            profile_path: Profile path from TMDB (e.g., "/abc123.jpg").
+            size: Image size. Valid sizes: w45, w185, h632, original.
+
+        Returns:
+            Full profile URL or None if no profile path provided.
+        """
+        if not profile_path:
+            return None
+
+        if size not in self.PROFILE_SIZES:
+            size = "w185"  # Default fallback
+
+        return f"{self.IMAGE_BASE_URL}/{size}{profile_path}"
 
     def to_movie_result_with_urls(
         self,
