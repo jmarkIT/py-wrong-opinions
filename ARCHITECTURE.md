@@ -306,7 +306,7 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - [x] **Step 1:** Implement user registration
 - [x] **Step 2:** Implement password hashing (bcrypt or argon2)
 - [x] **Step 3:** Implement JWT token generation/validation
-- [ ] **Step 4:** Add auth middleware/dependencies
+- [x] **Step 4:** Add auth middleware/dependencies
 - [ ] **Step 5:** Protect relevant endpoints
 
 ### Phase 7: Testing & Polish
