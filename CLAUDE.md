@@ -10,9 +10,10 @@ This document provides comprehensive guidance for AI assistants working on the W
 - Associate movies and albums with specific weeks
 - Track their selections over time for future viewing and analysis
 
-**Current Status**: Early development (Phase 2)
+**Current Status**: Early development (Phase 3)
 - Phase 1: Basic FastAPI setup, Pydantic settings - **COMPLETE**
-- Phase 2: Database foundation with async SQLAlchemy - **IN PROGRESS**
+- Phase 2: Database foundation with async SQLAlchemy - **COMPLETE**
+- Phase 3: External API clients - **NOT STARTED**
 
 **Target Users**: 2 users (small-scale personal project)
 
@@ -26,7 +27,12 @@ py-wrong-opinions/
 │   ├── config.py                # Pydantic settings management
 │   ├── database.py              # Async SQLAlchemy setup
 │   ├── api/                     # API route handlers (empty, planned)
-│   ├── models/                  # SQLAlchemy ORM models (empty, planned)
+│   ├── models/                  # SQLAlchemy ORM models
+│   │   ├── __init__.py          # Model exports
+│   │   ├── user.py              # User model
+│   │   ├── week.py              # Week, WeekMovie, WeekAlbum models
+│   │   ├── movie.py             # Movie model
+│   │   └── album.py             # Album model
 │   ├── schemas/                 # Pydantic request/response schemas (empty, planned)
 │   ├── services/                # Business logic & external API clients (empty, planned)
 │   └── utils/                   # Utility functions (empty, planned)
@@ -36,7 +42,10 @@ py-wrong-opinions/
 │   ├── test_models/             # Model tests (empty)
 │   └── test_services/           # Service tests (empty)
 ├── migrations/                  # Alembic database migrations
+│   ├── env.py                   # Alembic environment configuration
+│   ├── script.py.mako           # Migration template
 │   └── versions/                # Migration version files
+├── alembic.ini                  # Alembic configuration
 ├── pyproject.toml               # UV project configuration
 ├── uv.lock                      # Dependency lock file
 ├── .env.example                 # Environment variable template
@@ -324,7 +333,7 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 
 ## Data Model Overview
 
-See `ARCHITECTURE.md` for complete details. Key models (to be implemented):
+See `ARCHITECTURE.md` for complete details. All models have been implemented:
 
 ### Core Entities
 - **User**: Authentication and profile
@@ -434,6 +443,9 @@ uv run alembic history
 | `src/wrong_opinions/main.py` | FastAPI app entry | Single health check endpoint currently |
 | `src/wrong_opinions/config.py` | Settings management | Pydantic Settings, cached with `@lru_cache` |
 | `src/wrong_opinions/database.py` | Database setup | Async engine, session factory, `get_db` dependency |
+| `src/wrong_opinions/models/` | ORM models | User, Week, Movie, Album, WeekMovie, WeekAlbum |
+| `alembic.ini` | Alembic config | Migration settings, ruff post-write hooks |
+| `migrations/env.py` | Migration environment | Async support, imports models from settings |
 | `tests/conftest.py` | Test fixtures | `client` fixture for API testing |
 | `ARCHITECTURE.md` | Detailed plan | Complete data models, endpoints, implementation phases |
 | `.env.example` | Environment template | Copy to `.env` and fill in secrets |
@@ -448,13 +460,12 @@ uv run alembic history
 - ✅ Ruff configuration for linting/formatting
 - ✅ Pytest configuration with async support
 - ✅ Async SQLAlchemy setup with session management
+- ✅ ORM models (User, Week, Movie, Album, WeekMovie, WeekAlbum)
+- ✅ Alembic migration setup with async support
+- ✅ Initial database migration
+- ✅ Database session dependency (`get_db`)
 
-### In Progress (Phase 2)
-- ⏳ ORM models creation
-- ⏳ Alembic migration setup
-- ⏳ Database session dependency integration
-
-### Not Started
+### Not Started (Phase 3+)
 - ❌ External API clients (TMDB, MusicBrainz)
 - ❌ API endpoints (beyond health check)
 - ❌ Pydantic schemas for requests/responses
@@ -491,5 +502,5 @@ uv run alembic history
 
 ---
 
-**Last Updated**: 2025-12-27
+**Last Updated**: 2025-12-28
 **For Questions**: Refer to ARCHITECTURE.md for detailed specifications
