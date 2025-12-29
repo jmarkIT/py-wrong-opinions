@@ -350,9 +350,7 @@ class TestGetAlbumCredits:
         mock_db_session: AsyncMock,
     ) -> None:
         """Test successful album credits fetch from API."""
-        mock_musicbrainz_client.get_release = AsyncMock(
-            return_value=SAMPLE_RELEASE_WITH_CREDITS
-        )
+        mock_musicbrainz_client.get_release = AsyncMock(return_value=SAMPLE_RELEASE_WITH_CREDITS)
 
         # Mock scalars().all() to return empty list (no cached artists)
         mock_scalars = MagicMock()

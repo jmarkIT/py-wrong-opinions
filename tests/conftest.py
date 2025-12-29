@@ -1,9 +1,14 @@
 """Pytest fixtures and configuration."""
 
+import os
 from collections.abc import AsyncGenerator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+# Set test environment variables before importing the app
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-at-least-32-characters-long")
+os.environ.setdefault("DEBUG", "true")
 
 from wrong_opinions.main import app
 
