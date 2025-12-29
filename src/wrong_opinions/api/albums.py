@@ -18,6 +18,7 @@ from wrong_opinions.schemas.album import (
 )
 from wrong_opinions.services.base import NotFoundError
 from wrong_opinions.services.musicbrainz import MusicBrainzClient, get_musicbrainz_client
+from wrong_opinions.utils.security import CurrentUser
 
 router = APIRouter(prefix="/albums", tags=["albums"])
 
@@ -48,6 +49,7 @@ def _parse_musicbrainz_date(date_str: str | None) -> date | None:
 
 @router.get("/search", response_model=AlbumSearchResponse)
 async def search_albums(
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
     query: str = Query(..., min_length=1, description="Search query for albums"),
     limit: int = Query(25, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Result offset for pagination"),
@@ -57,7 +59,7 @@ async def search_albums(
 
     Returns a list of albums matching the search query.
     Note: MusicBrainz has a rate limit of 1 request per second.
-    APIError exceptions are handled globally by the application.
+    Requires authentication.
     """
     try:
         response = await musicbrainz_client.search_releases(query=query, limit=limit, offset=offset)
@@ -87,6 +89,7 @@ async def search_albums(
 @router.get("/{musicbrainz_id}", response_model=AlbumDetails)
 async def get_album(
     musicbrainz_id: str,
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
     db: AsyncSession = Depends(get_db),
     musicbrainz_client: MusicBrainzClient = Depends(get_musicbrainz_client),
 ) -> AlbumDetails:
@@ -94,6 +97,7 @@ async def get_album(
 
     First checks local cache, then fetches from MusicBrainz if not cached.
     Caches the result in the local database for future requests.
+    Requires authentication.
     """
     # Check local cache first
     result = await db.execute(select(Album).where(Album.musicbrainz_id == musicbrainz_id))
@@ -149,6 +153,7 @@ async def get_album(
 @router.get("/{musicbrainz_id}/credits", response_model=AlbumCredits)
 async def get_album_credits(
     musicbrainz_id: str,
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
     limit: int = Query(10, ge=1, le=50, description="Max number of artists to return"),
     db: AsyncSession = Depends(get_db),
     musicbrainz_client: MusicBrainzClient = Depends(get_musicbrainz_client),
@@ -157,6 +162,7 @@ async def get_album_credits(
 
     First checks local cache, then fetches from MusicBrainz if not cached.
     Caches the result in the local database for future requests.
+    Requires authentication.
     """
     # Check if we have the album in the database
     result = await db.execute(select(Album).where(Album.musicbrainz_id == musicbrainz_id))

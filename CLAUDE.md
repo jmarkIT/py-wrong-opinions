@@ -412,10 +412,13 @@ See `ARCHITECTURE.md` for complete details. All models have been implemented:
 - **WeekAlbum**: Links weeks to albums (max 2 per week)
 
 ### Important Constraints
-- Users can have one selection per ISO week (unique constraint)
+- Weeks are globally unique per calendar week (year + week_number) - only one selection can exist per week across all users
+- The user who creates a week owns it (user_id field) and is the only one who can modify it
+- Any authenticated user can view all weeks
 - Each week can have 1-2 movies (position 1 or 2)
 - Each week can have 1-2 albums (position 1 or 2)
-- External API data is cached in local database
+- External API data is cached in local database (shared globally)
+- All endpoints except /health, /api/auth/register, and /api/auth/login require authentication
 
 ## Common Tasks for AI Assistants
 

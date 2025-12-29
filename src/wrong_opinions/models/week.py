@@ -17,10 +17,10 @@ if TYPE_CHECKING:
 
 
 class Week(Base):
-    """Weekly selection period for a user."""
+    """Weekly selection period - globally unique per calendar week."""
 
     __tablename__ = "weeks"
-    __table_args__ = (UniqueConstraint("user_id", "year", "week_number", name="uq_user_year_week"),)
+    __table_args__ = (UniqueConstraint("year", "week_number", name="uq_year_week"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)

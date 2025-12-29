@@ -211,7 +211,7 @@ Get the authenticated user's information.
 
 Search for movies using TMDB.
 
-**Authentication:** Not required
+**Authentication:** Required
 
 **Query Parameters:**
 
@@ -261,7 +261,7 @@ GET /api/movies/search?query=inception&page=1&year=2010
 
 Get detailed information about a specific movie.
 
-**Authentication:** Not required
+**Authentication:** Required
 
 **Path Parameters:**
 
@@ -312,7 +312,7 @@ GET /api/movies/27205
 
 Get cast and crew information for a movie.
 
-**Authentication:** Not required
+**Authentication:** Required
 
 **Path Parameters:**
 
@@ -390,7 +390,7 @@ GET /api/movies/27205/credits?limit=5
 
 Search for albums using MusicBrainz.
 
-**Authentication:** Not required
+**Authentication:** Required
 
 **Rate Limit:** MusicBrainz enforces 1 request per second
 
@@ -445,7 +445,7 @@ GET /api/albums/search?query=dark+side+of+the+moon&limit=10
 
 Get detailed information about a specific album.
 
-**Authentication:** Not required
+**Authentication:** Required
 
 **Rate Limit:** 1 request per second (MusicBrainz)
 
@@ -493,7 +493,7 @@ GET /api/albums/3f49f47e-0e67-4f90-a3c0-df47c9b4b8c9
 
 Get artist credits for an album.
 
-**Authentication:** Not required
+**Authentication:** Required
 
 **Rate Limit:** 1 request per second (MusicBrainz)
 
@@ -549,13 +549,13 @@ GET /api/albums/3f49f47e-0e67-4f90-a3c0-df47c9b4b8c9/credits?limit=5
 
 ## Week Endpoints
 
-All week endpoints require authentication.
+All week endpoints require authentication. Weeks are globally unique per calendar week (year + week_number), meaning only one selection can exist per week across all users. Any authenticated user can view all weeks, but only the owner can modify their week's selections.
 
 ### List Weeks
 
 #### `GET /api/weeks`
 
-List all weeks for the authenticated user with pagination.
+List all weeks across all users with pagination.
 
 **Authentication:** Required
 
@@ -588,15 +588,21 @@ GET /api/weeks?page=1&page_size=20&year=2025
       "week_number": 52,
       "notes": "Great selections this week!",
       "created_at": "2025-12-22T10:00:00Z",
-      "updated_at": "2025-12-28T15:30:00Z"
+      "updated_at": "2025-12-28T15:30:00Z",
+      "owner": {
+        "id": 1,
+        "username": "johndoe"
+      }
     }
   ]
 }
 ```
 
 **Notes:**
+- Returns ALL weeks from all users (not filtered to current user)
 - Results are ordered by year and week_number in descending order (most recent first)
 - Does not include movie/album selections (use Get Week endpoint for full details)
+- `owner` field indicates who created the week
 
 ---
 
@@ -622,7 +628,7 @@ Create a new week selection.
 - `year`: 1900-2100
 - `week_number`: 1-53 (ISO week number)
 - `notes`: Optional
-- Users can only have ONE week per year+week_number combination
+- Only ONE week can exist per year+week_number globally (across all users)
 
 **Response:** `201 Created`
 
@@ -634,12 +640,16 @@ Create a new week selection.
   "week_number": 52,
   "notes": "Looking forward to watching these!",
   "created_at": "2025-12-28T16:00:00Z",
-  "updated_at": "2025-12-28T16:00:00Z"
+  "updated_at": "2025-12-28T16:00:00Z",
+  "owner": {
+    "id": 1,
+    "username": "johndoe"
+  }
 }
 ```
 
 **Errors:**
-- `409 Conflict` - Week already exists for this user
+- `409 Conflict` - Week already exists (another user already created this week)
 - `422 Unprocessable Entity` - Validation failed
 
 ---
@@ -648,7 +658,7 @@ Create a new week selection.
 
 #### `GET /api/weeks/current`
 
-Get or create the week for the current ISO week.
+Get the week for the current ISO week, or create it if it doesn't exist.
 
 **Authentication:** Required
 
@@ -663,6 +673,10 @@ Get or create the week for the current ISO week.
   "notes": null,
   "created_at": "2025-12-28T16:00:00Z",
   "updated_at": "2025-12-28T16:00:00Z",
+  "owner": {
+    "id": 1,
+    "username": "johndoe"
+  },
   "movies": [
     {
       "position": 1,
@@ -698,10 +712,12 @@ Get or create the week for the current ISO week.
 ```
 
 **Notes:**
-- Automatically creates a week for the current ISO week if it doesn't exist
+- If a week for the current ISO week already exists (created by any user), returns that week
+- Only creates a new week if no week exists for the current ISO week
 - Returns the week with all associated movies and albums
-- Useful for "My Week" or "This Week" views in the UI
+- Useful for "This Week" views in the UI
 - `movies` and `albums` arrays can be empty if nothing has been added yet
+- If the returned week was created by another user, you cannot modify it (403 Forbidden)
 
 ---
 
@@ -736,6 +752,10 @@ GET /api/weeks/124
   "notes": "Amazing week!",
   "created_at": "2025-12-28T16:00:00Z",
   "updated_at": "2025-12-28T16:15:00Z",
+  "owner": {
+    "id": 1,
+    "username": "johndoe"
+  },
   "movies": [
     {
       "position": 1,
@@ -771,12 +791,13 @@ GET /api/weeks/124
 ```
 
 **Notes:**
-- Returns 404 if the week doesn't exist or doesn't belong to the authenticated user
+- Any authenticated user can view any week (not filtered by owner)
 - `movies` array will have 0-2 items (position 1 and/or 2)
 - `albums` array will have 0-2 items (position 1 and/or 2)
+- `owner` field indicates who created the week
 
 **Errors:**
-- `404 Not Found` - Week doesn't exist or doesn't belong to user
+- `404 Not Found` - Week doesn't exist
 
 ---
 
@@ -784,7 +805,7 @@ GET /api/weeks/124
 
 #### `PATCH /api/weeks/{week_id}`
 
-Update a week's notes.
+Update a week's notes. Only the owner can update a week.
 
 **Authentication:** Required
 
@@ -805,6 +826,7 @@ Update a week's notes.
 **Notes:**
 - Currently only supports updating the `notes` field
 - Pass `null` to clear notes
+- Only the owner of the week can perform this operation
 
 **Response:** `200 OK`
 
@@ -816,12 +838,17 @@ Update a week's notes.
   "week_number": 52,
   "notes": "Updated my thoughts on this week's selections.",
   "created_at": "2025-12-28T16:00:00Z",
-  "updated_at": "2025-12-28T17:00:00Z"
+  "updated_at": "2025-12-28T17:00:00Z",
+  "owner": {
+    "id": 1,
+    "username": "johndoe"
+  }
 }
 ```
 
 **Errors:**
-- `404 Not Found` - Week doesn't exist or doesn't belong to user
+- `403 Forbidden` - Not the owner of this week
+- `404 Not Found` - Week doesn't exist
 
 ---
 
@@ -829,7 +856,7 @@ Update a week's notes.
 
 #### `DELETE /api/weeks/{week_id}`
 
-Delete a week and all its selections.
+Delete a week and all its selections. Only the owner can delete a week.
 
 **Authentication:** Required
 
@@ -844,9 +871,11 @@ Delete a week and all its selections.
 **Notes:**
 - Deletes the week and all associated movie/album selections
 - This action cannot be undone
+- Only the owner of the week can perform this operation
 
 **Errors:**
-- `404 Not Found` - Week doesn't exist or doesn't belong to user
+- `403 Forbidden` - Not the owner of this week
+- `404 Not Found` - Week doesn't exist
 
 ---
 
@@ -854,7 +883,7 @@ Delete a week and all its selections.
 
 #### `POST /api/weeks/{week_id}/movies`
 
-Add a movie to a week selection.
+Add a movie to a week selection. Only the owner can add movies to a week.
 
 **Authentication:** Required
 
@@ -877,6 +906,7 @@ Add a movie to a week selection.
 - `position`: Must be 1 or 2
 - Position must not already be occupied
 - Movie will be fetched from TMDB if not in local cache
+- Only the owner of the week can perform this operation
 
 **Response:** `201 Created`
 
@@ -899,7 +929,8 @@ Add a movie to a week selection.
 ```
 
 **Errors:**
-- `404 Not Found` - Week doesn't exist, doesn't belong to user, or movie not found in TMDB
+- `403 Forbidden` - Not the owner of this week
+- `404 Not Found` - Week doesn't exist or movie not found in TMDB
 - `409 Conflict` - Position is already occupied
 - `422 Unprocessable Entity` - Invalid position (not 1 or 2)
 
@@ -909,7 +940,7 @@ Add a movie to a week selection.
 
 #### `DELETE /api/weeks/{week_id}/movies/{position}`
 
-Remove a movie from a week selection.
+Remove a movie from a week selection. Only the owner can remove movies from a week.
 
 **Authentication:** Required
 
@@ -924,7 +955,8 @@ Remove a movie from a week selection.
 
 **Errors:**
 - `400 Bad Request` - Invalid position (not 1 or 2)
-- `404 Not Found` - Week doesn't exist, doesn't belong to user, or no movie at that position
+- `403 Forbidden` - Not the owner of this week
+- `404 Not Found` - Week doesn't exist or no movie at that position
 
 ---
 
@@ -932,7 +964,7 @@ Remove a movie from a week selection.
 
 #### `POST /api/weeks/{week_id}/albums`
 
-Add an album to a week selection.
+Add an album to a week selection. Only the owner can add albums to a week.
 
 **Authentication:** Required
 
@@ -955,6 +987,7 @@ Add an album to a week selection.
 - `position`: Must be 1 or 2
 - Position must not already be occupied
 - Album will be fetched from MusicBrainz if not in local cache
+- Only the owner of the week can perform this operation
 
 **Response:** `201 Created`
 
@@ -976,7 +1009,8 @@ Add an album to a week selection.
 ```
 
 **Errors:**
-- `404 Not Found` - Week doesn't exist, doesn't belong to user, or album not found in MusicBrainz
+- `403 Forbidden` - Not the owner of this week
+- `404 Not Found` - Week doesn't exist or album not found in MusicBrainz
 - `409 Conflict` - Position is already occupied
 - `422 Unprocessable Entity` - Invalid position (not 1 or 2)
 - `429 Too Many Requests` - MusicBrainz rate limit exceeded
@@ -987,7 +1021,7 @@ Add an album to a week selection.
 
 #### `DELETE /api/weeks/{week_id}/albums/{position}`
 
-Remove an album from a week selection.
+Remove an album from a week selection. Only the owner can remove albums from a week.
 
 **Authentication:** Required
 
@@ -1002,7 +1036,8 @@ Remove an album from a week selection.
 
 **Errors:**
 - `400 Bad Request` - Invalid position (not 1 or 2)
-- `404 Not Found` - Week doesn't exist, doesn't belong to user, or no album at that position
+- `403 Forbidden` - Not the owner of this week
+- `404 Not Found` - Week doesn't exist or no album at that position
 
 ---
 
@@ -1128,6 +1163,15 @@ Remove an album from a week selection.
 }
 ```
 
+### Week Owner
+
+```typescript
+{
+  id: number
+  username: string
+}
+```
+
 ### Week
 
 ```typescript
@@ -1139,6 +1183,7 @@ Remove an album from a week selection.
   notes: string | null
   created_at: string  // ISO 8601 datetime
   updated_at: string  // ISO 8601 datetime
+  owner: WeekOwner | null  // Who created this week
 }
 ```
 
@@ -1153,6 +1198,7 @@ Remove an album from a week selection.
   notes: string | null
   created_at: string
   updated_at: string
+  owner: WeekOwner | null  // Who created this week
   movies: [
     {
       position: number  // 1 or 2
@@ -1259,7 +1305,10 @@ MusicBrainz dates may be partial:
 Each week can have:
 - **0-2 movies** (positions 1 and 2)
 - **0-2 albums** (positions 1 and 2)
-- Users can only have ONE week per year+week_number combination
+- Only ONE week can exist per year+week_number combination globally (across all users)
+- The `user_id` indicates who owns the week and can modify it
+- Any authenticated user can view all weeks
+- Only the owner can add/remove movies/albums, update notes, or delete the week
 
 ### Auto-generated Documentation
 

@@ -19,12 +19,14 @@ from wrong_opinions.schemas.movie import (
 )
 from wrong_opinions.services.base import NotFoundError
 from wrong_opinions.services.tmdb import TMDBClient, get_tmdb_client
+from wrong_opinions.utils.security import CurrentUser
 
 router = APIRouter(prefix="/movies", tags=["movies"])
 
 
 @router.get("/search", response_model=MovieSearchResponse)
 async def search_movies(
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
     query: str = Query(..., min_length=1, description="Search query for movies"),
     page: int = Query(1, ge=1, description="Page number"),
     year: int | None = Query(None, ge=1800, le=2100, description="Filter by release year"),
@@ -33,7 +35,7 @@ async def search_movies(
     """Search for movies using TMDB.
 
     Returns a list of movies matching the search query.
-    APIError exceptions are handled globally by the application.
+    Requires authentication.
     """
     try:
         response = await tmdb_client.search_movies(query=query, page=page, year=year)
@@ -64,6 +66,7 @@ async def search_movies(
 @router.get("/{tmdb_id}", response_model=MovieDetails)
 async def get_movie(
     tmdb_id: int,
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
     db: AsyncSession = Depends(get_db),
     tmdb_client: TMDBClient = Depends(get_tmdb_client),
 ) -> MovieDetails:
@@ -71,6 +74,7 @@ async def get_movie(
 
     First checks local cache, then fetches from TMDB if not cached.
     Caches the result in the local database for future requests.
+    Requires authentication.
     """
     # Check local cache first
     result = await db.execute(select(Movie).where(Movie.tmdb_id == tmdb_id))
@@ -137,6 +141,7 @@ async def get_movie(
 @router.get("/{tmdb_id}/credits", response_model=MovieCredits)
 async def get_movie_credits(
     tmdb_id: int,
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
     limit: int = Query(10, ge=1, le=50, description="Max number of cast/crew to return"),
     db: AsyncSession = Depends(get_db),
     tmdb_client: TMDBClient = Depends(get_tmdb_client),
@@ -145,6 +150,7 @@ async def get_movie_credits(
 
     First checks local cache, then fetches from TMDB if not cached.
     Caches the result in the local database for future requests.
+    Requires authentication.
     """
     # Check if we have the movie in the database
     result = await db.execute(select(Movie).where(Movie.tmdb_id == tmdb_id))
