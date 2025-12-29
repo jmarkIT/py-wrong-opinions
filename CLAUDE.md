@@ -147,12 +147,16 @@ uv add --dev <package-name>      # Dev dependency
 - **Pattern**: Pydantic Settings with `.env` file
 - **Location**: `src/wrong_opinions/config.py`
 - **Usage**: `settings = get_settings()` (cached singleton via `@lru_cache`)
+- **Validation**:
+  - Settings are validated at import time - app will fail immediately if required fields are missing
+  - Startup event validates runtime configuration and logs warnings
+  - In production mode (debug=False), `secret_key` must be at least 32 characters
 - **Available settings**:
   - `app_name` - Application name (default: "Wrong Opinions API")
   - `debug` - Debug mode flag (default: False)
-  - `secret_key` - Secret key for security (default: "change-me-in-production")
+  - `secret_key` - **REQUIRED** - Secret key for security (no default, must be set in .env)
   - `database_url` - Database connection URL (default: SQLite)
-  - `tmdb_api_key` - TMDB API key (default: empty)
+  - `tmdb_api_key` - TMDB API key (default: empty, warning logged if not set)
   - `tmdb_base_url` - TMDB base URL
   - `musicbrainz_user_agent` - MusicBrainz User-Agent header
 - **Example**:
@@ -601,5 +605,5 @@ uv run fastapi dev src/wrong_opinions/main.py
 
 ---
 
-**Last Updated**: 2025-12-28
+**Last Updated**: 2025-12-29
 **For Questions**: Refer to ARCHITECTURE.md for detailed specifications
