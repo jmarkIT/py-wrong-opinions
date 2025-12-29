@@ -1,6 +1,6 @@
 """Tests for album API endpoints."""
 
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -14,6 +14,7 @@ from wrong_opinions.schemas.external import (
     MusicBrainzSearchResponse,
 )
 from wrong_opinions.services.musicbrainz import MusicBrainzClient, get_musicbrainz_client
+from wrong_opinions.utils.security import get_current_active_user
 
 # Sample test data - use model_validate with aliases for MusicBrainz schemas
 SAMPLE_SEARCH_RESPONSE = MusicBrainzSearchResponse(
@@ -86,14 +87,33 @@ def mock_db_session():
     return mock_session
 
 
+@pytest.fixture
+def mock_current_user():
+    """Create a mock authenticated user.
+
+    Note: We don't use spec=User to avoid SQLAlchemy attribute access issues.
+    """
+    mock_user = MagicMock()
+    mock_user.id = 1
+    mock_user.username = "testuser"
+    mock_user.email = "test@example.com"
+    mock_user.is_active = True
+    mock_user.created_at = datetime(2025, 1, 1, 12, 0, 0)
+    return mock_user
+
+
 class TestAlbumSearch:
     """Tests for album search endpoint."""
 
     async def test_search_albums_success(
-        self, client: AsyncClient, mock_musicbrainz_client: MagicMock
+        self,
+        client: AsyncClient,
+        mock_musicbrainz_client: MagicMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test successful album search."""
         app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/albums/search?query=Dark Side of the Moon")
@@ -110,10 +130,14 @@ class TestAlbumSearch:
             app.dependency_overrides.clear()
 
     async def test_search_albums_with_pagination(
-        self, client: AsyncClient, mock_musicbrainz_client: MagicMock
+        self,
+        client: AsyncClient,
+        mock_musicbrainz_client: MagicMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test album search with pagination parameters."""
         app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/albums/search?query=test&limit=50&offset=25")
@@ -125,23 +149,58 @@ class TestAlbumSearch:
         finally:
             app.dependency_overrides.clear()
 
-    async def test_search_albums_empty_query(self, client: AsyncClient) -> None:
+    async def test_search_albums_empty_query(
+        self,
+        client: AsyncClient,
+        mock_musicbrainz_client: MagicMock,
+        mock_current_user: MagicMock,
+    ) -> None:
         """Test album search with empty query returns 422."""
-        response = await client.get("/api/albums/search?query=")
+        app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
-        assert response.status_code == 422
+        try:
+            response = await client.get("/api/albums/search?query=")
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
 
-    async def test_search_albums_missing_query(self, client: AsyncClient) -> None:
+    async def test_search_albums_missing_query(
+        self,
+        client: AsyncClient,
+        mock_musicbrainz_client: MagicMock,
+        mock_current_user: MagicMock,
+    ) -> None:
         """Test album search without query parameter returns 422."""
-        response = await client.get("/api/albums/search")
+        app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
-        assert response.status_code == 422
+        try:
+            response = await client.get("/api/albums/search")
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
 
-    async def test_search_albums_limit_validation(self, client: AsyncClient) -> None:
+    async def test_search_albums_limit_validation(
+        self,
+        client: AsyncClient,
+        mock_musicbrainz_client: MagicMock,
+        mock_current_user: MagicMock,
+    ) -> None:
         """Test album search with invalid limit returns 422."""
-        response = await client.get("/api/albums/search?query=test&limit=101")
+        app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
-        assert response.status_code == 422
+        try:
+            response = await client.get("/api/albums/search?query=test&limit=101")
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_search_albums_unauthenticated(self, client: AsyncClient) -> None:
+        """Test album search without authentication returns 401."""
+        response = await client.get("/api/albums/search?query=test")
+        assert response.status_code == 401
 
 
 class TestGetAlbum:
@@ -152,6 +211,7 @@ class TestGetAlbum:
         client: AsyncClient,
         mock_musicbrainz_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test successful album details fetch from API."""
 
@@ -160,6 +220,7 @@ class TestGetAlbum:
 
         app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/albums/abc-123-uuid")
@@ -178,6 +239,7 @@ class TestGetAlbum:
         client: AsyncClient,
         mock_musicbrainz_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test album details fetch from cache."""
         # Set up cached album
@@ -198,6 +260,7 @@ class TestGetAlbum:
 
         app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/albums/abc-123-uuid")
@@ -216,6 +279,7 @@ class TestGetAlbum:
         client: AsyncClient,
         mock_musicbrainz_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test album details fetch for non-existent album."""
         from wrong_opinions.services.base import NotFoundError
@@ -227,6 +291,7 @@ class TestGetAlbum:
 
         app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/albums/invalid-uuid")
@@ -235,6 +300,11 @@ class TestGetAlbum:
             assert response.json()["detail"] == "Album not found"
         finally:
             app.dependency_overrides.clear()
+
+    async def test_get_album_unauthenticated(self, client: AsyncClient) -> None:
+        """Test get album without authentication returns 401."""
+        response = await client.get("/api/albums/abc-123-uuid")
+        assert response.status_code == 401
 
 
 class TestDateParsing:
@@ -348,6 +418,7 @@ class TestGetAlbumCredits:
         client: AsyncClient,
         mock_musicbrainz_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test successful album credits fetch from API."""
         mock_musicbrainz_client.get_release = AsyncMock(return_value=SAMPLE_RELEASE_WITH_CREDITS)
@@ -366,6 +437,7 @@ class TestGetAlbumCredits:
 
         app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/albums/abc-123-uuid/credits")
@@ -386,6 +458,7 @@ class TestGetAlbumCredits:
         client: AsyncClient,
         mock_musicbrainz_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test album credits with multiple artists (collaboration)."""
         mock_musicbrainz_client.get_release = AsyncMock(
@@ -405,6 +478,7 @@ class TestGetAlbumCredits:
 
         app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/albums/collab-uuid/credits")
@@ -425,6 +499,7 @@ class TestGetAlbumCredits:
         client: AsyncClient,
         mock_musicbrainz_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test album credits fetch for non-existent album."""
         from wrong_opinions.services.base import NotFoundError
@@ -443,6 +518,7 @@ class TestGetAlbumCredits:
 
         app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/albums/invalid-uuid/credits")
@@ -457,6 +533,7 @@ class TestGetAlbumCredits:
         client: AsyncClient,
         mock_musicbrainz_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test album credits with limit parameter."""
         mock_musicbrainz_client.get_release = AsyncMock(
@@ -476,6 +553,7 @@ class TestGetAlbumCredits:
 
         app.dependency_overrides[get_musicbrainz_client] = lambda: mock_musicbrainz_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/albums/collab-uuid/credits?limit=1")
@@ -487,3 +565,8 @@ class TestGetAlbumCredits:
             assert data["artists"][0]["name"] == "Jay-Z"
         finally:
             app.dependency_overrides.clear()
+
+    async def test_get_album_credits_unauthenticated(self, client: AsyncClient) -> None:
+        """Test get album credits without authentication returns 401."""
+        response = await client.get("/api/albums/abc-123-uuid/credits")
+        assert response.status_code == 401

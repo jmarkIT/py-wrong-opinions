@@ -98,18 +98,20 @@ class User:
 ```
 
 ### Week
-Represents a weekly selection period.
+Represents a weekly selection period. Weeks are globally unique per calendar week.
 ```python
 class Week:
     id: int (PK)
-    user_id: int (FK -> User)
+    user_id: int (FK -> User)  # Owner - only this user can modify the week
     year: int
     week_number: int  # ISO week number (1-53)
     notes: str | None  # Optional commentary
     created_at: datetime
     updated_at: datetime
 
-    # Constraints: unique(user_id, year, week_number)
+    # Constraints: unique(year, week_number) - globally unique per calendar week
+    # Note: user_id indicates ownership, not access control
+    # Any authenticated user can view all weeks
 ```
 
 ### Movie
@@ -388,7 +390,11 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
   - [x] **Step 2c:** Link albums to multiple artists (collaborations)
 - [ ] **Step 3:** Statistics/analytics endpoints
 - [ ] **Step 4:** Export functionality (CSV, JSON)
-- [ ] **Step 5:** Multiple users viewing each other's selections
+- [x] **Step 5:** Shared data model - All users can view all weeks
+  - [x] **Step 5a:** Changed week unique constraint to global (year, week_number)
+  - [x] **Step 5b:** All authenticated users can view all weeks
+  - [x] **Step 5c:** Only week owner can modify their selections (403 for non-owners)
+  - [x] **Step 5d:** Require authentication for movie/album endpoints
 - [ ] **Step 6:** Rating/review system for selections
 - [ ] **Step 7:** Recommendations based on history
 
@@ -446,3 +452,10 @@ uv run alembic upgrade head
 - JWT tokens (stateless, simple)
 - For a 2-user app, could simplify further
 - Can add OAuth later if needed
+
+### Shared data model
+- All endpoints (except register/login) require authentication
+- Weeks are globally unique per calendar week - only one selection per week
+- All authenticated users can view all data (weeks, movies, albums)
+- Only the owner of a week can modify it (add/remove selections, update notes, delete)
+- Movie and album cache is shared globally between all users

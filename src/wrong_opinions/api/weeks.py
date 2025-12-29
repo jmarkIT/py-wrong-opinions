@@ -20,6 +20,7 @@ from wrong_opinions.schemas.week import (
     WeekCreate,
     WeekListResponse,
     WeekMovieResponse,
+    WeekOwner,
     WeekResponse,
     WeekUpdate,
     WeekWithSelections,
@@ -33,10 +34,18 @@ router = APIRouter(prefix="/weeks", tags=["weeks"])
 
 
 def week_to_response(week: Week) -> WeekResponse:
-    """Convert a Week model to WeekResponse schema."""
+    """Convert a Week model to WeekResponse schema.
+
+    Requires week.user to be loaded for owner info.
+    """
+    owner = None
+    if week.user:
+        owner = WeekOwner(id=week.user.id, username=week.user.username)
+
     return WeekResponse(
         id=week.id,
         user_id=week.user_id,
+        owner=owner,
         year=week.year,
         week_number=week.week_number,
         notes=week.notes,
@@ -46,10 +55,17 @@ def week_to_response(week: Week) -> WeekResponse:
 
 
 def week_to_response_with_selections(week: Week) -> WeekWithSelections:
-    """Convert a Week model to WeekWithSelections schema."""
+    """Convert a Week model to WeekWithSelections schema.
+
+    Requires week.user to be loaded for owner info.
+    """
     from wrong_opinions.schemas.album import CachedAlbum
     from wrong_opinions.schemas.movie import CachedMovie
     from wrong_opinions.schemas.week import WeekAlbumSelection, WeekMovieSelection
+
+    owner = None
+    if week.user:
+        owner = WeekOwner(id=week.user.id, username=week.user.username)
 
     movies = [
         WeekMovieSelection(
@@ -89,6 +105,7 @@ def week_to_response_with_selections(week: Week) -> WeekWithSelections:
     return WeekWithSelections(
         id=week.id,
         user_id=week.user_id,
+        owner=owner,
         year=week.year,
         week_number=week.week_number,
         notes=week.notes,
@@ -101,19 +118,20 @@ def week_to_response_with_selections(week: Week) -> WeekWithSelections:
 
 @router.get("", response_model=WeekListResponse)
 async def list_weeks(
-    current_user: CurrentUser,
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     year: int | None = Query(None, ge=1900, le=2100, description="Filter by year"),
     db: AsyncSession = Depends(get_db),
 ) -> WeekListResponse:
-    """List all weeks for the current user.
+    """List all weeks globally.
 
-    Returns a paginated list of week selections, optionally filtered by year.
+    Returns a paginated list of all week selections, optionally filtered by year.
+    All authenticated users can view all weeks.
     Requires authentication.
     """
-    # Build base query
-    base_query = select(Week).where(Week.user_id == current_user.id)
+    # Build base query - no user filter, show all weeks globally
+    base_query = select(Week)
 
     if year is not None:
         base_query = base_query.where(Week.year == year)
@@ -123,10 +141,11 @@ async def list_weeks(
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
-    # Get paginated results
+    # Get paginated results with user info loaded
     offset = (page - 1) * page_size
     results_query = (
-        base_query.order_by(Week.year.desc(), Week.week_number.desc())
+        base_query.options(selectinload(Week.user))
+        .order_by(Week.year.desc(), Week.week_number.desc())
         .offset(offset)
         .limit(page_size)
     )
@@ -149,24 +168,30 @@ async def create_week(
 ) -> WeekResponse:
     """Create a new week selection.
 
-    Creates a new week for the current user. A user can only have one
-    selection per ISO week (year + week_number combination).
+    Creates a new week with the current user as owner. Only one selection
+    can exist per ISO week (year + week_number combination) globally.
     Requires authentication.
     """
-    # Check if week already exists for this user
-    existing_query = select(Week).where(
-        Week.user_id == current_user.id,
-        Week.year == week_data.year,
-        Week.week_number == week_data.week_number,
+    # Check if week already exists globally
+    existing_query = (
+        select(Week)
+        .where(
+            Week.year == week_data.year,
+            Week.week_number == week_data.week_number,
+        )
+        .options(selectinload(Week.user))
     )
     existing_result = await db.execute(existing_query)
-    if existing_result.scalar_one_or_none():
+    existing_week = existing_result.scalar_one_or_none()
+
+    if existing_week:
+        owner_name = existing_week.user.username if existing_week.user else "unknown"
         raise HTTPException(
             status_code=409,
-            detail=f"Week {week_data.year}-W{week_data.week_number:02d} already exists",
+            detail=f"Week {week_data.year}-W{week_data.week_number:02d} already exists (created by {owner_name})",
         )
 
-    # Create new week
+    # Create new week with current user as owner
     now = datetime.now(UTC)
     new_week = Week(
         user_id=current_user.id,
@@ -180,6 +205,9 @@ async def create_week(
     await db.flush()
     await db.refresh(new_week)
 
+    # Load user for response
+    new_week.user = current_user
+
     return week_to_response(new_week)
 
 
@@ -191,7 +219,8 @@ async def get_current_week(
     """Get or create the current week selection.
 
     Returns the week selection for the current ISO week. If no selection
-    exists for the current week, one is automatically created.
+    exists for the current week, one is automatically created with the
+    current user as owner.
     Requires authentication.
     """
     # Get current ISO week
@@ -200,15 +229,15 @@ async def get_current_week(
     current_year = iso_calendar[0]
     current_week = iso_calendar[1]
 
-    # Try to find existing week
+    # Try to find existing week globally
     query = (
         select(Week)
         .where(
-            Week.user_id == current_user.id,
             Week.year == current_year,
             Week.week_number == current_week,
         )
         .options(
+            selectinload(Week.user),
             selectinload(Week.week_movies).selectinload(WeekMovie.movie),
             selectinload(Week.week_albums).selectinload(WeekAlbum.album),
         )
@@ -217,7 +246,7 @@ async def get_current_week(
     week = result.scalar_one_or_none()
 
     if not week:
-        # Create new week for current period
+        # Create new week for current period with current user as owner
         week = Week(
             user_id=current_user.id,
             year=current_year,
@@ -230,9 +259,10 @@ async def get_current_week(
         await db.flush()
         await db.refresh(week)
 
-        # Initialize empty relationship lists for the response
+        # Initialize empty relationship lists and user for the response
         week.week_movies = []
         week.week_albums = []
+        week.user = current_user
 
     return week_to_response_with_selections(week)
 
@@ -240,18 +270,20 @@ async def get_current_week(
 @router.get("/{week_id}", response_model=WeekWithSelections)
 async def get_week(
     week_id: int,
-    current_user: CurrentUser,
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
     db: AsyncSession = Depends(get_db),
 ) -> WeekWithSelections:
     """Get a week with its movie and album selections.
 
     Returns the week details including all associated movies and albums.
+    Any authenticated user can view any week.
     Requires authentication.
     """
     query = (
         select(Week)
-        .where(Week.id == week_id, Week.user_id == current_user.id)
+        .where(Week.id == week_id)
         .options(
+            selectinload(Week.user),
             selectinload(Week.week_movies).selectinload(WeekMovie.movie),
             selectinload(Week.week_albums).selectinload(WeekAlbum.album),
         )
@@ -275,14 +307,18 @@ async def update_week(
     """Update a week selection.
 
     Currently only supports updating the notes field.
+    Only the owner can update a week.
     Requires authentication.
     """
-    query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
+    query = select(Week).where(Week.id == week_id).options(selectinload(Week.user))
     result = await db.execute(query)
     week = result.scalar_one_or_none()
 
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
+
+    if week.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 
     # Update notes if provided
     if week_data.notes is not None:
@@ -304,14 +340,18 @@ async def delete_week(
     """Delete a week selection.
 
     Deletes the week and all associated movie/album selections.
+    Only the owner can delete a week.
     Requires authentication.
     """
-    query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
+    query = select(Week).where(Week.id == week_id)
     result = await db.execute(query)
     week = result.scalar_one_or_none()
 
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
+
+    if week.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the owner can delete this week")
 
     await db.delete(week)
 
@@ -328,15 +368,19 @@ async def add_movie_to_week(
 
     Fetches the movie from TMDB (or cache) and adds it to the specified position.
     Position must be 1 or 2, and cannot be already occupied.
+    Only the owner can add movies to a week.
     Requires authentication.
     """
-    # Verify week exists and belongs to user
-    week_query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
+    # Verify week exists
+    week_query = select(Week).where(Week.id == week_id)
     week_result = await db.execute(week_query)
     week = week_result.scalar_one_or_none()
 
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
+
+    if week.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 
     # Check if position is already occupied
     existing_query = select(WeekMovie).where(
@@ -417,19 +461,23 @@ async def remove_movie_from_week(
     """Remove a movie from a week selection.
 
     Removes the movie at the specified position (1 or 2) from the week.
+    Only the owner can remove movies from a week.
     Requires authentication.
     """
     # Validate position
     if position not in (1, 2):
         raise HTTPException(status_code=400, detail="Position must be 1 or 2")
 
-    # Verify week exists and belongs to user
-    week_query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
+    # Verify week exists
+    week_query = select(Week).where(Week.id == week_id)
     week_result = await db.execute(week_query)
     week = week_result.scalar_one_or_none()
 
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
+
+    if week.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 
     # Find and delete the week-movie association
     week_movie_query = select(WeekMovie).where(
@@ -459,15 +507,19 @@ async def add_album_to_week(
 
     Fetches the album from MusicBrainz (or cache) and adds it to the specified position.
     Position must be 1 or 2, and cannot be already occupied.
+    Only the owner can add albums to a week.
     Requires authentication.
     """
-    # Verify week exists and belongs to user
-    week_query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
+    # Verify week exists
+    week_query = select(Week).where(Week.id == week_id)
     week_result = await db.execute(week_query)
     week = week_result.scalar_one_or_none()
 
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
+
+    if week.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 
     # Check if position is already occupied
     existing_query = select(WeekAlbum).where(
@@ -577,19 +629,23 @@ async def remove_album_from_week(
     """Remove an album from a week selection.
 
     Removes the album at the specified position (1 or 2) from the week.
+    Only the owner can remove albums from a week.
     Requires authentication.
     """
     # Validate position
     if position not in (1, 2):
         raise HTTPException(status_code=400, detail="Position must be 1 or 2")
 
-    # Verify week exists and belongs to user
-    week_query = select(Week).where(Week.id == week_id, Week.user_id == current_user.id)
+    # Verify week exists
+    week_query = select(Week).where(Week.id == week_id)
     week_result = await db.execute(week_query)
     week = week_result.scalar_one_or_none()
 
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
+
+    if week.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 
     # Find and delete the week-album association
     week_album_query = select(WeekAlbum).where(

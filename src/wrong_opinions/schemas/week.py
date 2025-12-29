@@ -8,6 +8,13 @@ from wrong_opinions.schemas.album import CachedAlbum
 from wrong_opinions.schemas.movie import CachedMovie
 
 
+class WeekOwner(BaseModel):
+    """Minimal user info for week ownership display."""
+
+    id: int = Field(description="User ID")
+    username: str = Field(description="Username")
+
+
 class WeekBase(BaseModel):
     """Base schema for week data."""
 
@@ -73,6 +80,7 @@ class WeekResponse(BaseModel):
 
     id: int = Field(description="Week ID")
     user_id: int = Field(description="Owner user ID")
+    owner: WeekOwner | None = Field(default=None, description="Owner information")
     year: int = Field(description="Year")
     week_number: int = Field(description="ISO week number (1-53)")
     notes: str | None = Field(default=None, description="Optional notes/commentary")

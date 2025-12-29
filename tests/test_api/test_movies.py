@@ -1,6 +1,6 @@
 """Tests for movie API endpoints."""
 
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -8,6 +8,7 @@ from httpx import AsyncClient
 
 from wrong_opinions.database import get_db
 from wrong_opinions.main import app
+from wrong_opinions.models.user import User
 from wrong_opinions.schemas.external import (
     TMDBCastMember,
     TMDBCreditsResponse,
@@ -17,6 +18,7 @@ from wrong_opinions.schemas.external import (
     TMDBSearchResponse,
 )
 from wrong_opinions.services.tmdb import TMDBClient, get_tmdb_client
+from wrong_opinions.utils.security import get_current_active_user
 
 # Sample test data
 SAMPLE_SEARCH_RESPONSE = TMDBSearchResponse(
@@ -143,14 +145,27 @@ def mock_db_session():
     return mock_session
 
 
+@pytest.fixture
+def mock_current_user():
+    """Create a mock authenticated user."""
+    mock_user = MagicMock(spec=User)
+    mock_user.id = 1
+    mock_user.username = "testuser"
+    mock_user.email = "test@example.com"
+    mock_user.is_active = True
+    mock_user.created_at = datetime(2025, 1, 1, 12, 0, 0)
+    return mock_user
+
+
 class TestMovieSearch:
     """Tests for movie search endpoint."""
 
     async def test_search_movies_success(
-        self, client: AsyncClient, mock_tmdb_client: MagicMock
+        self, client: AsyncClient, mock_tmdb_client: MagicMock, mock_current_user: MagicMock
     ) -> None:
         """Test successful movie search."""
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/search?query=Fight Club")
@@ -167,10 +182,11 @@ class TestMovieSearch:
             app.dependency_overrides.clear()
 
     async def test_search_movies_with_year(
-        self, client: AsyncClient, mock_tmdb_client: MagicMock
+        self, client: AsyncClient, mock_tmdb_client: MagicMock, mock_current_user: MagicMock
     ) -> None:
         """Test movie search with year filter."""
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/search?query=Fight&year=1999")
@@ -181,11 +197,12 @@ class TestMovieSearch:
             app.dependency_overrides.clear()
 
     async def test_search_movies_empty_query(
-        self, client: AsyncClient, mock_tmdb_client: MagicMock
+        self, client: AsyncClient, mock_tmdb_client: MagicMock, mock_current_user: MagicMock
     ) -> None:
         """Test movie search with empty query returns 422."""
         # Need mock because dependency is resolved before validation
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/search?query=")
@@ -194,11 +211,12 @@ class TestMovieSearch:
             app.dependency_overrides.clear()
 
     async def test_search_movies_missing_query(
-        self, client: AsyncClient, mock_tmdb_client: MagicMock
+        self, client: AsyncClient, mock_tmdb_client: MagicMock, mock_current_user: MagicMock
     ) -> None:
         """Test movie search without query parameter returns 422."""
         # Need mock because dependency is resolved before validation
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/search")
@@ -207,10 +225,11 @@ class TestMovieSearch:
             app.dependency_overrides.clear()
 
     async def test_search_movies_pagination(
-        self, client: AsyncClient, mock_tmdb_client: MagicMock
+        self, client: AsyncClient, mock_tmdb_client: MagicMock, mock_current_user: MagicMock
     ) -> None:
         """Test movie search with pagination."""
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/search?query=test&page=2")
@@ -229,6 +248,7 @@ class TestGetMovie:
         client: AsyncClient,
         mock_tmdb_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test successful movie details fetch from API."""
 
@@ -237,6 +257,7 @@ class TestGetMovie:
 
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/550")
@@ -255,6 +276,7 @@ class TestGetMovie:
         client: AsyncClient,
         mock_tmdb_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test movie details fetch from cache."""
         # Set up cached movie
@@ -276,6 +298,7 @@ class TestGetMovie:
 
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/550")
@@ -294,6 +317,7 @@ class TestGetMovie:
         client: AsyncClient,
         mock_tmdb_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test movie details fetch for non-existent movie."""
         from wrong_opinions.services.base import NotFoundError
@@ -305,6 +329,7 @@ class TestGetMovie:
 
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/99999999")
@@ -323,6 +348,7 @@ class TestGetMovieCredits:
         client: AsyncClient,
         mock_tmdb_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test successful movie credits fetch from API."""
 
@@ -331,6 +357,7 @@ class TestGetMovieCredits:
 
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/550/credits")
@@ -357,6 +384,7 @@ class TestGetMovieCredits:
         client: AsyncClient,
         mock_tmdb_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test movie credits fetch for non-existent movie."""
         from wrong_opinions.services.base import NotFoundError
@@ -368,6 +396,7 @@ class TestGetMovieCredits:
 
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/99999999/credits")
@@ -382,6 +411,7 @@ class TestGetMovieCredits:
         client: AsyncClient,
         mock_tmdb_client: MagicMock,
         mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
     ) -> None:
         """Test movie credits fetch with custom limit."""
 
@@ -390,6 +420,7 @@ class TestGetMovieCredits:
 
         app.dependency_overrides[get_tmdb_client] = lambda: mock_tmdb_client
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
 
         try:
             response = await client.get("/api/movies/550/credits?limit=5")

@@ -30,11 +30,26 @@ def mock_db_session():
 
 @pytest.fixture
 def mock_current_user():
-    """Create a mock authenticated user."""
-    mock_user = MagicMock(spec=User)
+    """Create a mock authenticated user.
+
+    Note: We don't use spec=User because SQLAlchemy tries to access
+    _sa_instance_state when assigning to relationships, which fails on mocks.
+    """
+    mock_user = MagicMock()
     mock_user.id = 1
     mock_user.username = "testuser"
     mock_user.email = "test@example.com"
+    mock_user.is_active = True
+    mock_user.created_at = datetime(2025, 1, 1, 12, 0, 0)
+    return mock_user
+
+
+def create_mock_user(id: int = 1) -> MagicMock:
+    """Create a mock User object."""
+    mock_user = MagicMock(spec=User)
+    mock_user.id = id
+    mock_user.username = f"user{id}"
+    mock_user.email = f"user{id}@example.com"
     mock_user.is_active = True
     mock_user.created_at = datetime(2025, 1, 1, 12, 0, 0)
     return mock_user
@@ -58,18 +73,9 @@ def create_mock_week(
     mock_week.updated_at = datetime(2025, 1, 1, 12, 0, 0)
     mock_week.week_movies = []
     mock_week.week_albums = []
+    # Add user for owner info in responses
+    mock_week.user = create_mock_user(user_id)
     return mock_week
-
-
-def create_mock_user(id: int = 1) -> MagicMock:
-    """Create a mock User object."""
-    mock_user = MagicMock(spec=User)
-    mock_user.id = id
-    mock_user.username = f"user{id}"
-    mock_user.email = f"user{id}@example.com"
-    mock_user.is_active = True
-    mock_user.created_at = datetime(2025, 1, 1, 12, 0, 0)
-    return mock_user
 
 
 class TestListWeeks:
