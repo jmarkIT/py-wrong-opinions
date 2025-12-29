@@ -381,6 +381,10 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
   - `GET /movie/{id}` - Get movie details
 - **Images**: `https://image.tmdb.org/t/p/{size}/{path}`
 - **Rate limits**: Generous (40 requests per 10 seconds)
+- **Data quality notes**:
+  - TMDB may return empty strings (`""`) for optional date fields (e.g., `release_date` for unreleased movies)
+  - Use Pydantic `@field_validator` with `mode="before"` to convert empty strings to `None` before date parsing
+  - Example implemented in `schemas/external.py` for `TMDBMovieResult` and `TMDBMovieDetails`
 
 ### MusicBrainz
 - **Authentication**: None (User-Agent required in headers)

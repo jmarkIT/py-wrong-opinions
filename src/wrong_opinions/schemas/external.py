@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # TMDB Schemas
@@ -20,6 +20,14 @@ class TMDBMovieResult(BaseModel):
     vote_average: float = Field(default=0.0, description="Average vote score")
     vote_count: int = Field(default=0, description="Number of votes")
     popularity: float = Field(default=0.0, description="Popularity score")
+
+    @field_validator("release_date", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v: str | date | None) -> str | date | None:
+        """Convert empty strings to None for date fields."""
+        if v == "":
+            return None
+        return v
 
 
 class TMDBSearchResponse(BaseModel):
@@ -55,6 +63,14 @@ class TMDBMovieDetails(BaseModel):
     revenue: int = Field(default=0, description="Box office revenue")
     imdb_id: str | None = Field(default=None, description="IMDB ID")
     homepage: str | None = Field(default=None, description="Official homepage URL")
+
+    @field_validator("release_date", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v: str | date | None) -> str | date | None:
+        """Convert empty strings to None for date fields."""
+        if v == "":
+            return None
+        return v
 
 
 class TMDBCastMember(BaseModel):
