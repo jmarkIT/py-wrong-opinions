@@ -293,19 +293,27 @@ class TestGetCurrentWeek:
         self, client: AsyncClient, mock_db_session: AsyncMock, mock_current_user: MagicMock
     ) -> None:
         """Test getting current week when none exists creates a new one."""
-        # Mock week lookup - no existing week
-        week_result = MagicMock()
-        week_result.scalar_one_or_none.return_value = None
+        from datetime import UTC
 
-        mock_db_session.execute = AsyncMock(return_value=week_result)
+        now = datetime.now(UTC)
+        iso_cal = now.isocalendar()
+        current_year = iso_cal[0]
+        current_week_num = iso_cal[1]
 
-        # Mock flush and refresh to set the created week's properties
-        async def mock_refresh(week):
-            week.id = 1
-            week.created_at = datetime(2025, 1, 1, 12, 0, 0)
-            week.updated_at = datetime(2025, 1, 1, 12, 0, 0)
+        # Create a mock week for the reload query
+        mock_created_week = create_mock_week(
+            id=1, year=current_year, week_number=current_week_num, notes=None
+        )
 
-        mock_db_session.refresh = mock_refresh
+        # First query returns None (no existing week), second query returns created week
+        first_result = MagicMock()
+        first_result.scalar_one_or_none.return_value = None
+
+        second_result = MagicMock()
+        second_result.scalar_one.return_value = mock_created_week
+
+        mock_db_session.execute = AsyncMock(side_effect=[first_result, second_result])
+        mock_db_session.flush = AsyncMock()
 
         async def override_get_db():
             yield mock_db_session

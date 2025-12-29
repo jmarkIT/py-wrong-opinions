@@ -257,12 +257,19 @@ async def get_current_week(
         )
         db.add(week)
         await db.flush()
-        await db.refresh(week)
 
-        # Initialize empty relationship lists and user for the response
-        week.week_movies = []
-        week.week_albums = []
-        week.user = current_user
+        # Re-query with eager loading to get all relationships properly loaded
+        reload_query = (
+            select(Week)
+            .where(Week.id == week.id)
+            .options(
+                selectinload(Week.user),
+                selectinload(Week.week_movies).selectinload(WeekMovie.movie),
+                selectinload(Week.week_albums).selectinload(WeekAlbum.album),
+            )
+        )
+        result = await db.execute(reload_query)
+        week = result.scalar_one()
 
     return week_to_response_with_selections(week)
 
