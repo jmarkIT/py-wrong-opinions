@@ -104,3 +104,44 @@ class MovieDetailsWithCredits(MovieDetails):
     """Movie details including cast and crew."""
 
     credits: MovieCredits | None = Field(default=None, description="Movie cast and crew")
+
+
+class MovieSelectionWeek(BaseModel):
+    """Week context for a movie selection."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    week_id: int = Field(description="Week ID")
+    year: int = Field(description="Year")
+    week_number: int = Field(description="ISO week number")
+    position: int = Field(description="Position in week (1 or 2)")
+    added_at: datetime = Field(description="When movie was added to week")
+
+
+class MovieWithSelections(BaseModel):
+    """Movie with all weeks it was selected in."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int = Field(description="Local database ID")
+    tmdb_id: int = Field(description="TMDB movie ID")
+    title: str = Field(description="Movie title")
+    original_title: str | None = Field(default=None, description="Original title")
+    release_date: date | None = Field(default=None, description="Release date")
+    poster_path: str | None = Field(default=None, description="Poster image path")
+    overview: str | None = Field(default=None, description="Movie overview/synopsis")
+    cached_at: datetime = Field(description="When movie data was cached")
+    selections: list[MovieSelectionWeek] = Field(
+        default_factory=list, description="Weeks this movie was selected"
+    )
+
+
+class MovieSelectionsListResponse(BaseModel):
+    """Paginated list of all selected movies."""
+
+    total: int = Field(description="Total number of selected movies")
+    page: int = Field(description="Current page number")
+    page_size: int = Field(description="Number of results per page")
+    results: list[MovieWithSelections] = Field(
+        default_factory=list, description="Movies with their selections"
+    )

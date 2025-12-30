@@ -1,6 +1,6 @@
 """Pydantic schemas for album API endpoints."""
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -87,3 +87,42 @@ class AlbumDetailsWithCredits(AlbumDetails):
     """Album details including artist credits."""
 
     credits: AlbumCredits | None = Field(default=None, description="Album artist credits")
+
+
+class AlbumSelectionWeek(BaseModel):
+    """Week context for an album selection."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    week_id: int = Field(description="Week ID")
+    year: int = Field(description="Year")
+    week_number: int = Field(description="ISO week number")
+    position: int = Field(description="Position in week (1 or 2)")
+    added_at: datetime = Field(description="When album was added to week")
+
+
+class AlbumWithSelections(BaseModel):
+    """Album with all weeks it was selected in."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int = Field(description="Local database ID")
+    musicbrainz_id: str = Field(description="MusicBrainz release ID (UUID)")
+    title: str = Field(description="Album/release title")
+    artist: str = Field(description="Primary artist name")
+    release_date: date | None = Field(default=None, description="Release date")
+    cover_art_url: str | None = Field(default=None, description="Cover art URL")
+    selections: list[AlbumSelectionWeek] = Field(
+        default_factory=list, description="Weeks this album was selected"
+    )
+
+
+class AlbumSelectionsListResponse(BaseModel):
+    """Paginated list of all selected albums."""
+
+    total: int = Field(description="Total number of selected albums")
+    page: int = Field(description="Current page number")
+    page_size: int = Field(description="Number of results per page")
+    results: list[AlbumWithSelections] = Field(
+        default_factory=list, description="Albums with their selections"
+    )
