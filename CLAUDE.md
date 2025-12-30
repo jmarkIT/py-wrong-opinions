@@ -199,9 +199,11 @@ uv add --dev <package-name>      # Dev dependency
 - Each route file exports a router: `router = APIRouter(prefix="/movies", tags=["movies"])`
 - Available endpoints:
   - `/api/movies/search` - Search TMDB for movies
+  - `/api/movies/selections` - List all movies ever selected (paginated)
   - `/api/movies/{tmdb_id}` - Get movie details (cached)
   - `/api/movies/{tmdb_id}/credits` - Get movie cast & crew (cached)
   - `/api/albums/search` - Search MusicBrainz for albums
+  - `/api/albums/selections` - List all albums ever selected (paginated)
   - `/api/albums/{musicbrainz_id}` - Get album details (cached)
   - `/api/albums/{musicbrainz_id}/credits` - Get album artist credits (cached)
   - `/api/weeks` - CRUD operations for week selections
@@ -612,5 +614,5 @@ uv run fastapi dev src/wrong_opinions/main.py
 
 ---
 
-**Last Updated**: 2025-12-29
+**Last Updated**: 2025-12-30
 **For Questions**: Refer to ARCHITECTURE.md for detailed specifications

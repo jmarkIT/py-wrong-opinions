@@ -570,3 +570,47 @@ class TestGetAlbumCredits:
         """Test get album credits without authentication returns 401."""
         response = await client.get("/api/albums/abc-123-uuid/credits")
         assert response.status_code == 401
+
+
+class TestListSelectedAlbums:
+    """Tests for list all selected albums endpoint."""
+
+    async def test_list_selected_albums_empty(
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
+    ) -> None:
+        """Test listing albums when none have been selected."""
+        # Mock count returning 0
+        mock_count_result = MagicMock()
+        mock_count_result.scalar_one.return_value = 0
+
+        # Mock empty results
+        mock_results = MagicMock()
+        mock_results.scalars.return_value.all.return_value = []
+
+        mock_db_session.execute = AsyncMock(side_effect=[mock_count_result, mock_results])
+
+        async def override_get_db():
+            yield mock_db_session
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
+
+        try:
+            response = await client.get("/api/albums/selections")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 0
+            assert data["page"] == 1
+            assert data["page_size"] == 20
+            assert data["results"] == []
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_list_selected_albums_unauthenticated(self, client: AsyncClient) -> None:
+        """Test that unauthenticated requests are rejected."""
+        response = await client.get("/api/albums/selections")
+        assert response.status_code == 401

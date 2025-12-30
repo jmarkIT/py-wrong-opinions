@@ -3,17 +3,22 @@
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from wrong_opinions.database import get_db
 from wrong_opinions.models.album import Album
 from wrong_opinions.models.artist import AlbumArtist, Artist
+from wrong_opinions.models.week import WeekAlbum
 from wrong_opinions.schemas.album import (
     AlbumCredits,
     AlbumDetails,
     AlbumSearchResponse,
     AlbumSearchResult,
+    AlbumSelectionsListResponse,
+    AlbumSelectionWeek,
+    AlbumWithSelections,
     ArtistCredit,
 )
 from wrong_opinions.services.base import NotFoundError
@@ -84,6 +89,69 @@ async def search_albums(
         )
     finally:
         await musicbrainz_client.close()
+
+
+@router.get("/selections", response_model=AlbumSelectionsListResponse)
+async def list_all_selected_albums(
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Results per page"),
+    db: AsyncSession = Depends(get_db),
+) -> AlbumSelectionsListResponse:
+    """List all albums that have been selected in any week.
+
+    Returns a paginated list of albums with their week selection context.
+    Sorted alphabetically by title.
+    Requires authentication.
+    """
+    # Count total distinct albums with selections
+    count_query = select(func.count(func.distinct(Album.id))).select_from(Album).join(WeekAlbum)
+    total_result = await db.execute(count_query)
+    total = total_result.scalar_one()
+
+    # Get paginated albums with eager-loaded week associations
+    offset = (page - 1) * page_size
+    albums_query = (
+        select(Album)
+        .join(WeekAlbum)
+        .distinct()
+        .options(selectinload(Album.week_albums).selectinload(WeekAlbum.week))
+        .order_by(func.lower(Album.title))
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(albums_query)
+    albums = result.scalars().all()
+
+    # Build response with selection details
+    results = [
+        AlbumWithSelections(
+            id=album.id,
+            musicbrainz_id=album.musicbrainz_id,
+            title=album.title,
+            artist=album.artist,
+            release_date=album.release_date,
+            cover_art_url=album.cover_art_url,
+            selections=[
+                AlbumSelectionWeek(
+                    week_id=wa.week.id,
+                    year=wa.week.year,
+                    week_number=wa.week.week_number,
+                    position=wa.position,
+                    added_at=wa.added_at,
+                )
+                for wa in album.week_albums
+            ],
+        )
+        for album in albums
+    ]
+
+    return AlbumSelectionsListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        results=results,
+    )
 
 
 @router.get("/{musicbrainz_id}", response_model=AlbumDetails)

@@ -256,6 +256,7 @@ class AlbumArtist:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/movies/search` | Search TMDB for movies |
+| GET | `/api/movies/selections` | List all movies ever selected (paginated) |
 | GET | `/api/movies/{tmdb_id}` | Get movie details from TMDB |
 | GET | `/api/movies/{tmdb_id}/credits` | Get movie cast & crew from TMDB |
 | POST | `/api/weeks/{week_id}/movies` | Add movie to week |
@@ -265,6 +266,7 @@ class AlbumArtist:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/albums/search` | Search MusicBrainz for albums |
+| GET | `/api/albums/selections` | List all albums ever selected (paginated) |
 | GET | `/api/albums/{musicbrainz_id}` | Get album details |
 | GET | `/api/albums/{musicbrainz_id}/credits` | Get album artist credits from MusicBrainz |
 | POST | `/api/weeks/{week_id}/albums` | Add album to week |

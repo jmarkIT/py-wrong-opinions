@@ -3,12 +3,14 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from wrong_opinions.database import get_db
 from wrong_opinions.models.movie import Movie
 from wrong_opinions.models.person import MovieCast, MovieCrew, Person
+from wrong_opinions.models.week import WeekMovie
 from wrong_opinions.schemas.movie import (
     CastMember,
     CrewMember,
@@ -16,6 +18,9 @@ from wrong_opinions.schemas.movie import (
     MovieDetails,
     MovieSearchResponse,
     MovieSearchResult,
+    MovieSelectionsListResponse,
+    MovieSelectionWeek,
+    MovieWithSelections,
 )
 from wrong_opinions.services.base import NotFoundError
 from wrong_opinions.services.tmdb import TMDBClient, get_tmdb_client
@@ -61,6 +66,71 @@ async def search_movies(
         )
     finally:
         await tmdb_client.close()
+
+
+@router.get("/selections", response_model=MovieSelectionsListResponse)
+async def list_all_selected_movies(
+    current_user: CurrentUser,  # noqa: ARG001 - Required for auth enforcement
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Results per page"),
+    db: AsyncSession = Depends(get_db),
+) -> MovieSelectionsListResponse:
+    """List all movies that have been selected in any week.
+
+    Returns a paginated list of movies with their week selection context.
+    Sorted alphabetically by title.
+    Requires authentication.
+    """
+    # Count total distinct movies with selections
+    count_query = select(func.count(func.distinct(Movie.id))).select_from(Movie).join(WeekMovie)
+    total_result = await db.execute(count_query)
+    total = total_result.scalar_one()
+
+    # Get paginated movies with eager-loaded week associations
+    offset = (page - 1) * page_size
+    movies_query = (
+        select(Movie)
+        .join(WeekMovie)
+        .distinct()
+        .options(selectinload(Movie.week_movies).selectinload(WeekMovie.week))
+        .order_by(func.lower(Movie.title))
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(movies_query)
+    movies = result.scalars().all()
+
+    # Build response with selection details
+    results = [
+        MovieWithSelections(
+            id=movie.id,
+            tmdb_id=movie.tmdb_id,
+            title=movie.title,
+            original_title=movie.original_title,
+            release_date=movie.release_date,
+            poster_path=movie.poster_path,
+            overview=movie.overview,
+            cached_at=movie.cached_at,
+            selections=[
+                MovieSelectionWeek(
+                    week_id=wm.week.id,
+                    year=wm.week.year,
+                    week_number=wm.week.week_number,
+                    position=wm.position,
+                    added_at=wm.added_at,
+                )
+                for wm in movie.week_movies
+            ],
+        )
+        for movie in movies
+    ]
+
+    return MovieSelectionsListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        results=results,
+    )
 
 
 @router.get("/{tmdb_id}", response_model=MovieDetails)
