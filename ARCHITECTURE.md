@@ -135,7 +135,7 @@ class Album:
     id: int (PK)
     musicbrainz_id: str (unique, UUID)
     title: str
-    artist: str
+    artist: str  # Multiple artists concatenated with join phrases (e.g., "Jay-Z & Kanye West")
     release_date: date | None
     cover_art_url: str | None
     cached_at: datetime
@@ -299,6 +299,7 @@ class AlbumArtist:
   - `GET /release/{mbid}` - Get release details
 - Cover Art: `https://coverartarchive.org/release/{mbid}`
 - Rate limit: 1 request/second (respect this!)
+- Artist credits: Returns `artist-credit` array with `name` and `joinphrase` fields. Concatenate all entries with their join phrases for display (e.g., "Artist 1 & Artist 2 feat. Artist 3")
 
 ---
 

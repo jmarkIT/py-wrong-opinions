@@ -398,6 +398,7 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - **Cover art**: `https://coverartarchive.org/release/{mbid}`
 - **Rate limit**: **1 request per second** (MUST respect!)
 - **Required header**: `User-Agent: WrongOpinions/1.0 (email@example.com)`
+- **Artist credits**: MusicBrainz returns artist credits as an array with join phrases. The `artist_name` property in `MusicBrainzReleaseDetails` concatenates all artists with their join phrases (e.g., `[{name: "Jay-Z", joinphrase: " & "}, {name: "Kanye West"}]` becomes "Jay-Z & Kanye West")
 
 ## Data Model Overview
 
