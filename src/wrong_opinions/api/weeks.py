@@ -550,9 +550,7 @@ async def add_album_to_week(
             mb_release = await musicbrainz_client.get_release(album_data.musicbrainz_id)
 
             # Get artist name from the release
-            artist_name = "Unknown Artist"
-            if mb_release.artist_credit:
-                artist_name = mb_release.artist_credit
+            artist_name = mb_release.artist_name or "Unknown Artist"
 
             # Parse release date if available
             release_date = None

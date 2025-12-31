@@ -151,12 +151,16 @@ class MusicBrainzReleaseResult(BaseModel):
 
     @property
     def artist_name(self) -> str | None:
-        """Get the primary artist name."""
-        if self.artist_credit:
-            credit = self.artist_credit[0]
-            # Use credited name, falling back to artist.name if available
-            return credit.name
-        return None
+        """Get the full artist name with join phrases."""
+        if not self.artist_credit:
+            return None
+        # Concatenate all artist names with their join phrases
+        result = ""
+        for credit in self.artist_credit:
+            result += credit.name
+            if credit.joinphrase:
+                result += credit.joinphrase
+        return result or None
 
 
 class MusicBrainzSearchResponse(BaseModel):
@@ -188,7 +192,13 @@ class MusicBrainzReleaseDetails(BaseModel):
 
     @property
     def artist_name(self) -> str | None:
-        """Get the primary artist name."""
-        if self.artist_credit:
-            return self.artist_credit[0].name
-        return None
+        """Get the full artist name with join phrases."""
+        if not self.artist_credit:
+            return None
+        # Concatenate all artist names with their join phrases
+        result = ""
+        for credit in self.artist_credit:
+            result += credit.name
+            if credit.joinphrase:
+                result += credit.joinphrase
+        return result or None

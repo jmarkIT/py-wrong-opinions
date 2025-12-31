@@ -1020,11 +1020,11 @@ def mock_musicbrainz_client():
     mock_client = AsyncMock()
     mock_client.close = AsyncMock()
 
-    # Create a mock release response
+    # Create a mock release response with artist_name property
     mock_release_response = MagicMock()
     mock_release_response.id = "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f"
     mock_release_response.title = "OK Computer"
-    mock_release_response.artist_credit = "Radiohead"
+    mock_release_response.artist_name = "Radiohead"
     mock_release_response.date = "1997-05-21"
 
     mock_client.get_release = AsyncMock(return_value=mock_release_response)
@@ -1273,6 +1273,86 @@ class TestAddAlbumToWeek:
         )
 
         assert response.status_code == 401
+
+    async def test_add_album_artist_name_correctly_cached(
+        self,
+        client: AsyncClient,
+        mock_db_session: AsyncMock,
+        mock_current_user: MagicMock,
+    ) -> None:
+        """Test that album artist name is correctly extracted from MusicBrainz response."""
+        mock_week = create_mock_week(id=1)
+
+        # Create a mock release response with multi-artist credits
+        mock_release_response = MagicMock()
+        mock_release_response.id = "multi-artist-uuid"
+        mock_release_response.title = "Watch the Throne"
+        mock_release_response.artist_name = "Jay-Z & Kanye West"  # Simulates join phrase concatenation
+        mock_release_response.date = "2011-08-08"
+
+        # Create mock MusicBrainz client
+        mock_mb_client = AsyncMock()
+        mock_mb_client.close = AsyncMock()
+        mock_mb_client.get_release = AsyncMock(return_value=mock_release_response)
+        mock_mb_client.get_cover_art_front_url = MagicMock(
+            return_value="https://coverartarchive.org/release/multi-artist-uuid/front"
+        )
+
+        # Mock week lookup
+        week_result = MagicMock()
+        week_result.scalar_one_or_none.return_value = mock_week
+
+        # Mock position check - no existing album at position
+        position_result = MagicMock()
+        position_result.scalar_one_or_none.return_value = None
+
+        # Mock album lookup - album not in cache
+        album_result = MagicMock()
+        album_result.scalar_one_or_none.return_value = None
+
+        mock_db_session.execute = AsyncMock(
+            side_effect=[week_result, position_result, album_result]
+        )
+
+        # Track added album to verify artist name
+        added_album = None
+
+        def capture_add(obj):
+            nonlocal added_album
+            if hasattr(obj, "artist") and hasattr(obj, "musicbrainz_id"):
+                added_album = obj
+
+        mock_db_session.add = MagicMock(side_effect=capture_add)
+
+        async def mock_flush():
+            if added_album:
+                added_album.id = 1
+                added_album.cached_at = datetime(2025, 1, 1, 12, 0, 0)
+
+        mock_db_session.flush = AsyncMock(side_effect=mock_flush)
+
+        async def override_get_db():
+            yield mock_db_session
+
+        def override_get_musicbrainz_client():
+            return mock_mb_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_musicbrainz_client] = override_get_musicbrainz_client
+        app.dependency_overrides[get_current_active_user] = lambda: mock_current_user
+
+        try:
+            response = await client.post(
+                "/api/weeks/1/albums",
+                json={"musicbrainz_id": "multi-artist-uuid", "position": 1},
+            )
+
+            assert response.status_code == 201
+            # Verify the album was cached with the correct artist name
+            assert added_album is not None
+            assert added_album.artist == "Jay-Z & Kanye West"
+        finally:
+            app.dependency_overrides.clear()
 
 
 class TestRemoveAlbumFromWeek:
