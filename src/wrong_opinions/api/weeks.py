@@ -546,8 +546,10 @@ async def add_album_to_week(
         album = album_result.scalar_one_or_none()
 
         if not album:
-            # Fetch from MusicBrainz and cache
-            mb_release = await musicbrainz_client.get_release(album_data.musicbrainz_id)
+            # Fetch from MusicBrainz and cache (include artist credits for artist name)
+            mb_release = await musicbrainz_client.get_release(
+                album_data.musicbrainz_id, include_artist_credits=True
+            )
 
             # Get artist name from the release
             artist_name = mb_release.artist_name or "Unknown Artist"
