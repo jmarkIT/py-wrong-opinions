@@ -50,6 +50,11 @@ SAMPLE_RELEASE_DETAILS = {
     "artist-credit": [
         {"name": "Pink Floyd"},
     ],
+    "release-group": {
+        "id": "rg-789-uuid",
+        "title": "The Dark Side of the Moon",
+        "primary-type": "Album",
+    },
 }
 
 
@@ -221,6 +226,58 @@ class TestGetRelease:
             call_args = mock_client.request.call_args
             assert call_args.kwargs["params"]["fmt"] == "json"
 
+    async def test_get_release_always_includes_release_groups(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test that get release always includes release-groups in inc parameter."""
+        mock_response = httpx.Response(200, json=SAMPLE_RELEASE_DETAILS)
+
+        with patch.object(mb_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            await mb_client.get_release("abc-123-uuid")
+
+            # Verify release-groups was included in inc parameter
+            call_args = mock_client.request.call_args
+            assert "release-groups" in call_args.kwargs["params"]["inc"]
+
+    async def test_get_release_with_artist_credits_includes_both(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test that get release with artist credits includes both in inc parameter."""
+        mock_response = httpx.Response(200, json=SAMPLE_RELEASE_DETAILS)
+
+        with patch.object(mb_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            await mb_client.get_release("abc-123-uuid", include_artist_credits=True)
+
+            # Verify both release-groups and artist-credits were included
+            call_args = mock_client.request.call_args
+            inc_param = call_args.kwargs["params"]["inc"]
+            assert "release-groups" in inc_param
+            assert "artist-credits" in inc_param
+
+    async def test_get_release_parses_release_group(self, mb_client: MusicBrainzClient) -> None:
+        """Test that get release correctly parses release-group data."""
+        mock_response = httpx.Response(200, json=SAMPLE_RELEASE_DETAILS)
+
+        with patch.object(mb_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            result = await mb_client.get_release("abc-123-uuid")
+
+            assert result.release_group is not None
+            assert result.release_group.id == "rg-789-uuid"
+            assert result.release_group.title == "The Dark Side of the Moon"
+            assert result.release_group.primary_type == "Album"
+
     async def test_get_release_not_found(self, mb_client: MusicBrainzClient) -> None:
         """Test release details fetch for non-existent release."""
         mock_response = httpx.Response(404, json={"error": "Not Found"})
@@ -295,6 +352,133 @@ class TestCoverArtURLGeneration:
         """Test front cover art URL generation."""
         url = mb_client.get_cover_art_front_url("abc-123-uuid")
         assert url == "https://coverartarchive.org/release/abc-123-uuid/front"
+
+    def test_get_cover_art_release_group_url(self, mb_client: MusicBrainzClient) -> None:
+        """Test release-group cover art URL generation."""
+        url = mb_client.get_cover_art_release_group_url("rg-456-uuid")
+        assert url == "https://coverartarchive.org/release-group/rg-456-uuid/front"
+
+
+class TestCoverArtValidation:
+    """Tests for cover art validation methods."""
+
+    async def test_check_cover_art_exists_returns_true_on_307(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test that 307 redirect means cover art exists."""
+        mock_response = httpx.Response(307, headers={"Location": "https://example.com/image.jpg"})
+
+        with patch("wrong_opinions.services.musicbrainz.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.head = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            result = await mb_client._check_cover_art_exists(
+                "https://coverartarchive.org/release/abc-123/front"
+            )
+            assert result is True
+
+    async def test_check_cover_art_exists_returns_true_on_200(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test that 200 response means cover art exists."""
+        mock_response = httpx.Response(200)
+
+        with patch("wrong_opinions.services.musicbrainz.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.head = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            result = await mb_client._check_cover_art_exists(
+                "https://coverartarchive.org/release/abc-123/front"
+            )
+            assert result is True
+
+    async def test_check_cover_art_exists_returns_false_on_404(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test that 404 means no cover art."""
+        mock_response = httpx.Response(404)
+
+        with patch("wrong_opinions.services.musicbrainz.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.head = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            result = await mb_client._check_cover_art_exists(
+                "https://coverartarchive.org/release/abc-123/front"
+            )
+            assert result is False
+
+    async def test_check_cover_art_exists_returns_false_on_request_error(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test that request errors return False gracefully."""
+        with patch("wrong_opinions.services.musicbrainz.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.head = AsyncMock(side_effect=httpx.RequestError("Connection failed"))
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            result = await mb_client._check_cover_art_exists(
+                "https://coverartarchive.org/release/abc-123/front"
+            )
+            assert result is False
+
+    async def test_get_validated_cover_art_url_release_exists(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test validated URL returns release URL when exists."""
+        with patch.object(mb_client, "_check_cover_art_exists", return_value=True) as mock_check:
+            result = await mb_client.get_validated_cover_art_url("abc-123", "rg-456")
+
+            assert result == "https://coverartarchive.org/release/abc-123/front"
+            mock_check.assert_called_once_with("https://coverartarchive.org/release/abc-123/front")
+
+    async def test_get_validated_cover_art_url_falls_back_to_release_group(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test fallback to release-group when release has no cover art."""
+        with patch.object(mb_client, "_check_cover_art_exists") as mock_check:
+            # First call (release) returns False, second (release-group) returns True
+            mock_check.side_effect = [False, True]
+
+            result = await mb_client.get_validated_cover_art_url("abc-123", "rg-456")
+
+            assert result == "https://coverartarchive.org/release-group/rg-456/front"
+            assert mock_check.call_count == 2
+            mock_check.assert_any_call("https://coverartarchive.org/release/abc-123/front")
+            mock_check.assert_any_call("https://coverartarchive.org/release-group/rg-456/front")
+
+    async def test_get_validated_cover_art_url_returns_none_when_no_art(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test returns None when neither release nor release-group has art."""
+        with patch.object(mb_client, "_check_cover_art_exists", return_value=False) as mock_check:
+            result = await mb_client.get_validated_cover_art_url("abc-123", "rg-456")
+
+            assert result is None
+            assert mock_check.call_count == 2
+
+    async def test_get_validated_cover_art_url_without_release_group(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test validation without release-group ID."""
+        with patch.object(mb_client, "_check_cover_art_exists", return_value=False) as mock_check:
+            result = await mb_client.get_validated_cover_art_url("abc-123", None)
+
+            assert result is None
+            # Only checks release, not release-group
+            mock_check.assert_called_once_with("https://coverartarchive.org/release/abc-123/front")
+
+    async def test_get_validated_cover_art_url_no_release_group_with_release_art(
+        self, mb_client: MusicBrainzClient
+    ) -> None:
+        """Test validation returns release URL when release-group is None but release has art."""
+        with patch.object(mb_client, "_check_cover_art_exists", return_value=True) as mock_check:
+            result = await mb_client.get_validated_cover_art_url("abc-123", None)
+
+            assert result == "https://coverartarchive.org/release/abc-123/front"
+            mock_check.assert_called_once()
 
 
 class TestContextManager:

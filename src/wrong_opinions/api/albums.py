@@ -63,24 +63,35 @@ async def search_albums(
     """Search for albums using MusicBrainz.
 
     Returns a list of albums matching the search query.
+    Cover art URLs are validated - only releases with actual cover art will have a URL.
+    Note: Search results don't include release-group data, so only release cover art is checked.
+    Full release-group fallback happens when fetching album details.
     Note: MusicBrainz has a rate limit of 1 request per second.
     Requires authentication.
     """
     try:
         response = await musicbrainz_client.search_releases(query=query, limit=limit, offset=offset)
 
-        results = [
-            AlbumSearchResult(
-                musicbrainz_id=release.id,
-                title=release.title,
-                artist=release.artist_name,
-                release_date=release.date,
-                country=release.country,
-                score=release.score,
-                cover_art_url=musicbrainz_client.get_cover_art_front_url(release.id),
+        results = []
+        for release in response.releases:
+            # Validate cover art - search results don't have release-group info
+            # so we only check release cover art (no fallback available)
+            cover_art_url = await musicbrainz_client.get_validated_cover_art_url(
+                release.id,
+                release_group_id=None,
             )
-            for release in response.releases
-        ]
+
+            results.append(
+                AlbumSearchResult(
+                    musicbrainz_id=release.id,
+                    title=release.title,
+                    artist=release.artist_name,
+                    release_date=release.date,
+                    country=release.country,
+                    score=release.score,
+                    cover_art_url=cover_art_url,
+                )
+            )
 
         return AlbumSearchResponse(
             count=response.count,
@@ -190,13 +201,22 @@ async def get_album(
     try:
         release = await musicbrainz_client.get_release(musicbrainz_id)
 
+        # Get release-group ID for cover art fallback
+        release_group_id = release.release_group.id if release.release_group else None
+
+        # Validate cover art with release-group fallback
+        cover_art_url = await musicbrainz_client.get_validated_cover_art_url(
+            release.id,
+            release_group_id=release_group_id,
+        )
+
         # Cache the album in the database
         new_album = Album(
             musicbrainz_id=release.id,
             title=release.title,
             artist=release.artist_name or "Unknown Artist",
             release_date=_parse_musicbrainz_date(release.date),
-            cover_art_url=musicbrainz_client.get_cover_art_front_url(release.id),
+            cover_art_url=cover_art_url,
             cached_at=datetime.now(UTC),
         )
         db.add(new_album)
@@ -209,7 +229,7 @@ async def get_album(
             release_date=release.date,
             country=release.country,
             status=release.status,
-            cover_art_url=musicbrainz_client.get_cover_art_front_url(release.id),
+            cover_art_url=cover_art_url,
             cached=False,
         )
     except NotFoundError:
@@ -273,12 +293,21 @@ async def get_album_credits(
 
         # If album doesn't exist yet, fetch and cache it first
         if not cached_album:
+            # Get release-group ID for cover art fallback
+            release_group_id = release.release_group.id if release.release_group else None
+
+            # Validate cover art with release-group fallback
+            cover_art_url = await musicbrainz_client.get_validated_cover_art_url(
+                release.id,
+                release_group_id=release_group_id,
+            )
+
             cached_album = Album(
                 musicbrainz_id=release.id,
                 title=release.title,
                 artist=release.artist_name or "Unknown Artist",
                 release_date=_parse_musicbrainz_date(release.date),
-                cover_art_url=musicbrainz_client.get_cover_art_front_url(release.id),
+                cover_art_url=cover_art_url,
                 cached_at=datetime.now(UTC),
             )
             db.add(cached_album)

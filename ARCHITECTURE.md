@@ -296,10 +296,18 @@ class AlbumArtist:
 - Format: JSON (`?fmt=json`)
 - Key endpoints:
   - `GET /release?query={search}` - Search releases/albums
-  - `GET /release/{mbid}` - Get release details
-- Cover Art: `https://coverartarchive.org/release/{mbid}`
+  - `GET /release/{mbid}?inc=release-groups` - Get release details (always includes release-group)
 - Rate limit: 1 request/second (respect this!)
 - Artist credits: Returns `artist-credit` array with `name` and `joinphrase` fields. Concatenate all entries with their join phrases for display (e.g., "Artist 1 & Artist 2 feat. Artist 3")
+
+### Cover Art Archive
+- Base URLs:
+  - Release: `https://coverartarchive.org/release/{mbid}/front`
+  - Release-group: `https://coverartarchive.org/release-group/{mbid}/front`
+- Cover art validation: HEAD requests check if cover art exists (307 = exists, 404 = not found)
+- Fallback strategy: If release has no cover art, falls back to release-group cover art
+- If neither has cover art, `cover_art_url` is stored as `null`
+- Separate service from MusicBrainz (different rate limits)
 
 ---
 

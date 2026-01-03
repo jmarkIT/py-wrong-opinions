@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import httpx
+
 from wrong_opinions.config import get_settings
 from wrong_opinions.schemas.external import (
     MusicBrainzReleaseDetails,
@@ -17,8 +19,9 @@ class MusicBrainzClient(BaseAPIClient):
     Important: MusicBrainz has a rate limit of 1 request per second.
     """
 
-    # Cover Art Archive base URL for album art
+    # Cover Art Archive base URLs for album art
     COVER_ART_BASE_URL = "https://coverartarchive.org/release"
+    COVER_ART_RELEASE_GROUP_BASE_URL = "https://coverartarchive.org/release-group"
 
     def __init__(
         self,
@@ -84,6 +87,8 @@ class MusicBrainzClient(BaseAPIClient):
     ) -> MusicBrainzReleaseDetails:
         """Get detailed information about a specific release.
 
+        Always includes release-group information for cover art fallback.
+
         Args:
             release_id: MusicBrainz release ID (UUID).
             include_artist_credits: If True, include full artist credit information.
@@ -95,8 +100,13 @@ class MusicBrainzClient(BaseAPIClient):
             NotFoundError: If the release is not found.
         """
         params: dict[str, Any] = {"fmt": "json"}  # Required for JSON response
+
+        # Build inc parameter - always include release-groups for cover art fallback
+        inc_parts = ["release-groups"]
         if include_artist_credits:
-            params["inc"] = "artist-credits"
+            inc_parts.append("artist-credits")
+        params["inc"] = "+".join(inc_parts)
+
         data = await self.get(f"/release/{release_id}", params=params)
         return MusicBrainzReleaseDetails.model_validate(data)
 
@@ -154,6 +164,78 @@ class MusicBrainzClient(BaseAPIClient):
             The actual request to this URL may return 404 if no cover art is available.
         """
         return f"{self.COVER_ART_BASE_URL}/{release_id}/front"
+
+    def get_cover_art_release_group_url(
+        self,
+        release_group_id: str,
+    ) -> str:
+        """Generate Cover Art Archive URL for a release-group's front cover.
+
+        Args:
+            release_group_id: MusicBrainz release-group ID (UUID).
+
+        Returns:
+            URL to fetch front cover art image from release-group.
+
+        Note:
+            This returns the URL but doesn't verify if cover art exists.
+            The actual request to this URL may return 404 if no cover art is available.
+        """
+        return f"{self.COVER_ART_RELEASE_GROUP_BASE_URL}/{release_group_id}/front"
+
+    async def _check_cover_art_exists(self, url: str) -> bool:
+        """Check if cover art exists at the given URL using HEAD request.
+
+        Cover Art Archive returns 307 redirect if cover art exists, 404 if not.
+
+        Note:
+            This does NOT use the MusicBrainz rate limiter since Cover Art Archive
+            is a separate service with different rate limits.
+
+        Args:
+            url: Cover Art Archive URL to check.
+
+        Returns:
+            True if cover art exists, False otherwise.
+        """
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+            try:
+                response = await client.head(url)
+                # Cover Art Archive returns 307 redirect if cover exists
+                return response.status_code in (200, 307)
+            except httpx.RequestError:
+                return False
+
+    async def get_validated_cover_art_url(
+        self,
+        release_id: str,
+        release_group_id: str | None = None,
+    ) -> str | None:
+        """Get a validated cover art URL, with release-group fallback.
+
+        Checks if cover art actually exists before returning the URL.
+        Falls back to release-group cover art if release has none.
+
+        Args:
+            release_id: MusicBrainz release ID (UUID).
+            release_group_id: Optional release-group ID for fallback.
+
+        Returns:
+            Validated cover art URL, or None if no cover art exists.
+        """
+        # Try release cover art first
+        release_url = self.get_cover_art_front_url(release_id)
+        if await self._check_cover_art_exists(release_url):
+            return release_url
+
+        # Fall back to release-group cover art
+        if release_group_id:
+            release_group_url = self.get_cover_art_release_group_url(release_group_id)
+            if await self._check_cover_art_exists(release_group_url):
+                return release_group_url
+
+        # No cover art found
+        return None
 
 
 async def get_musicbrainz_client() -> MusicBrainzClient:

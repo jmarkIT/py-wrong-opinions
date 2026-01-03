@@ -394,11 +394,24 @@ MUSICBRAINZ_USER_AGENT=WrongOpinions/1.0 (your-email@example.com)
 - **Format**: Add `?fmt=json` to all requests
 - **Key endpoints**:
   - `GET /release?query={search}&fmt=json` - Search albums
-  - `GET /release/{mbid}?fmt=json` - Get album details
-- **Cover art**: `https://coverartarchive.org/release/{mbid}`
+  - `GET /release/{mbid}?inc=release-groups&fmt=json` - Get album details (always includes release-group for cover art fallback)
 - **Rate limit**: **1 request per second** (MUST respect!)
 - **Required header**: `User-Agent: WrongOpinions/1.0 (email@example.com)`
 - **Artist credits**: MusicBrainz returns artist credits as an array with join phrases. The `artist_name` property in `MusicBrainzReleaseDetails` concatenates all artists with their join phrases (e.g., `[{name: "Jay-Z", joinphrase: " & "}, {name: "Kanye West"}]` becomes "Jay-Z & Kanye West")
+
+### Cover Art Archive
+- **Separate service** from MusicBrainz (different rate limits)
+- **Base URLs**:
+  - Release: `https://coverartarchive.org/release/{mbid}/front`
+  - Release-group: `https://coverartarchive.org/release-group/{mbid}/front`
+- **Cover art validation**: HEAD requests check if cover art exists (307 = exists, 404 = not found)
+- **Fallback strategy**: If release has no cover art, falls back to release-group cover art
+- **If neither has cover art**, `cover_art_url` is stored as `null`
+- **MusicBrainz client methods**:
+  - `get_cover_art_front_url(release_id)` - Generate speculative release cover URL
+  - `get_cover_art_release_group_url(release_group_id)` - Generate release-group cover URL
+  - `_check_cover_art_exists(url)` - Validate URL exists via HEAD request
+  - `get_validated_cover_art_url(release_id, release_group_id)` - Validate with release-group fallback
 
 ## Data Model Overview
 
@@ -539,7 +552,7 @@ uv run fastapi dev src/wrong_opinions/main.py
 | `src/wrong_opinions/api/router.py` | API router aggregation | Combines movies, albums, weeks routers |
 | `src/wrong_opinions/api/weeks.py` | Week endpoints | CRUD + add/remove movie/album to week |
 | `src/wrong_opinions/services/tmdb.py` | TMDB client | Movie search, details, image URLs |
-| `src/wrong_opinions/services/musicbrainz.py` | MusicBrainz client | Album search, details, rate limiting |
+| `src/wrong_opinions/services/musicbrainz.py` | MusicBrainz client | Album search, details, rate limiting, cover art validation |
 | `src/wrong_opinions/models/` | ORM models | User, Week, Movie, Album, WeekMovie, WeekAlbum |
 | `src/wrong_opinions/schemas/` | Pydantic schemas | Request/response models for API |
 | `alembic.ini` | Alembic config | Migration settings, ruff post-write hooks |
@@ -563,7 +576,7 @@ uv run fastapi dev src/wrong_opinions/main.py
 - ✅ Database migrations
 - ✅ Database session dependency (`get_db`)
 - ✅ TMDB API client with search, details, and credits
-- ✅ MusicBrainz API client with rate limiting
+- ✅ MusicBrainz API client with rate limiting and cover art validation
 - ✅ Movie search and details endpoints
 - ✅ Movie credits endpoint (cast & crew)
 - ✅ Album search and details endpoints
@@ -615,5 +628,5 @@ uv run fastapi dev src/wrong_opinions/main.py
 
 ---
 
-**Last Updated**: 2025-12-30
+**Last Updated**: 2026-01-03
 **For Questions**: Refer to ARCHITECTURE.md for detailed specifications

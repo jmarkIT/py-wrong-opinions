@@ -1020,15 +1020,24 @@ def mock_musicbrainz_client():
     mock_client = AsyncMock()
     mock_client.close = AsyncMock()
 
-    # Create a mock release response with artist_name property
+    # Create a mock release-group for cover art fallback
+    mock_release_group = MagicMock()
+    mock_release_group.id = "rg-12345-uuid"
+
+    # Create a mock release response with artist_name property and release_group
     mock_release_response = MagicMock()
     mock_release_response.id = "a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f"
     mock_release_response.title = "OK Computer"
     mock_release_response.artist_name = "Radiohead"
     mock_release_response.date = "1997-05-21"
+    mock_release_response.release_group = mock_release_group
 
     mock_client.get_release = AsyncMock(return_value=mock_release_response)
     mock_client.get_cover_art_front_url = MagicMock(
+        return_value="https://coverartarchive.org/release/a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f/front"
+    )
+    # Mock the validated cover art URL method
+    mock_client.get_validated_cover_art_url = AsyncMock(
         return_value="https://coverartarchive.org/release/a3e6b6e8-9b3a-4a6e-8e5f-1d2c3b4a5e6f/front"
     )
     return mock_client
@@ -1283,18 +1292,28 @@ class TestAddAlbumToWeek:
         """Test that album artist name is correctly extracted from MusicBrainz response."""
         mock_week = create_mock_week(id=1)
 
+        # Create a mock release-group for cover art fallback
+        mock_release_group = MagicMock()
+        mock_release_group.id = "rg-multi-artist-uuid"
+
         # Create a mock release response with multi-artist credits
         mock_release_response = MagicMock()
         mock_release_response.id = "multi-artist-uuid"
         mock_release_response.title = "Watch the Throne"
-        mock_release_response.artist_name = "Jay-Z & Kanye West"  # Simulates join phrase concatenation
+        mock_release_response.artist_name = (
+            "Jay-Z & Kanye West"  # Simulates join phrase concatenation
+        )
         mock_release_response.date = "2011-08-08"
+        mock_release_response.release_group = mock_release_group
 
         # Create mock MusicBrainz client
         mock_mb_client = AsyncMock()
         mock_mb_client.close = AsyncMock()
         mock_mb_client.get_release = AsyncMock(return_value=mock_release_response)
         mock_mb_client.get_cover_art_front_url = MagicMock(
+            return_value="https://coverartarchive.org/release/multi-artist-uuid/front"
+        )
+        mock_mb_client.get_validated_cover_art_url = AsyncMock(
             return_value="https://coverartarchive.org/release/multi-artist-uuid/front"
         )
 

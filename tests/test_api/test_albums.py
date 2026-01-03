@@ -57,6 +57,11 @@ SAMPLE_RELEASE_DETAILS = MusicBrainzReleaseDetails.model_validate(
         "date": "1973-03-01",
         "barcode": "077774644426",
         "artist-credit": [{"name": "Pink Floyd"}],
+        "release-group": {
+            "id": "rg-789-uuid",
+            "title": "The Dark Side of the Moon",
+            "primary-type": "Album",
+        },
     }
 )
 
@@ -69,6 +74,12 @@ def mock_musicbrainz_client():
     mock_client.get_release = AsyncMock(return_value=SAMPLE_RELEASE_DETAILS)
     mock_client.get_cover_art_front_url.side_effect = lambda id: (
         f"https://coverartarchive.org/release/{id}/front"
+    )
+    # Mock the validated cover art URL method - returns the release URL by default
+    mock_client.get_validated_cover_art_url = AsyncMock(
+        side_effect=lambda release_id, release_group_id=None: (  # noqa: ARG005
+            f"https://coverartarchive.org/release/{release_id}/front"
+        )
     )
     mock_client.close = AsyncMock()
     return mock_client

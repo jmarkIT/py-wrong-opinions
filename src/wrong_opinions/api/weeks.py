@@ -577,8 +577,14 @@ async def add_album_to_week(
                 except (ValueError, IndexError):
                     pass  # Keep release_date as None if parsing fails
 
-            # Get cover art URL
-            cover_art_url = musicbrainz_client.get_cover_art_front_url(album_data.musicbrainz_id)
+            # Get release-group ID for cover art fallback
+            release_group_id = mb_release.release_group.id if mb_release.release_group else None
+
+            # Validate cover art with release-group fallback
+            cover_art_url = await musicbrainz_client.get_validated_cover_art_url(
+                album_data.musicbrainz_id,
+                release_group_id=release_group_id,
+            )
 
             album = Album(
                 musicbrainz_id=mb_release.id,

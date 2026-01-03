@@ -493,7 +493,7 @@ GET /api/albums/search?query=dark+side+of+the+moon&limit=10
 - `artist`: For albums with multiple artists, names are concatenated with their join phrases (e.g., "Jay-Z & Kanye West", "Artist feat. Guest")
 - `release_date`: Can be YYYY, YYYY-MM, or YYYY-MM-DD format (or `null`)
 - `score`: Search relevance score (0-100)
-- `cover_art_url`: May be `null` if no cover art is available
+- `cover_art_url`: `null` if no cover art exists for this release (validated via HEAD request to Cover Art Archive)
 
 **Errors:**
 - `429 Too Many Requests` - Rate limit exceeded (includes `Retry-After` header)
@@ -542,6 +542,7 @@ GET /api/albums/3f49f47e-0e67-4f90-a3c0-df47c9b4b8c9
 - `artist`: For albums with multiple artists, names are concatenated with their join phrases (e.g., "Jay-Z & Kanye West")
 - When `cached: true`, `country` and `status` may be `null`
 - `release_date`: Can be partial (YYYY or YYYY-MM) or full (YYYY-MM-DD)
+- `cover_art_url`: Validated via HEAD request; uses release-group fallback if release has no cover art; `null` if neither has cover art
 
 **Errors:**
 - `404 Not Found` - Album doesn't exist in MusicBrainz
@@ -1454,9 +1455,13 @@ Most programming languages have built-in ISO week support:
 - Backdrop sizes: w300, w780, w1280, original
 
 **MusicBrainz Cover Art:**
-- Cover art URLs are provided as full URLs
-- Format: `https://coverartarchive.org/release/{musicbrainz_id}/front-500`
-- May return 404 if no cover art is available
+- Cover art URLs are provided as full URLs (or `null` if no cover art exists)
+- Format: `https://coverartarchive.org/release/{musicbrainz_id}/front`
+- Cover art existence is validated via HEAD request before storing
+- **Fallback strategy**: If release has no cover art, falls back to release-group cover art (`https://coverartarchive.org/release-group/{release_group_id}/front`)
+- If neither release nor release-group has cover art, `cover_art_url` is stored as `null`
+- **Search results**: Only validate release-level cover art (no fallback available)
+- **Detail endpoints**: Validate with release-group fallback
 
 ### Rate Limiting
 

@@ -175,6 +175,18 @@ class MusicBrainzSearchResponse(BaseModel):
     )
 
 
+class MusicBrainzReleaseGroup(BaseModel):
+    """Release group information from MusicBrainz."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(description="MusicBrainz release-group ID (UUID)")
+    title: str | None = Field(default=None, description="Release group title")
+    primary_type: str | None = Field(
+        default=None, alias="primary-type", description="Primary type (Album, EP, etc.)"
+    )
+
+
 class MusicBrainzReleaseDetails(BaseModel):
     """Detailed release information from MusicBrainz."""
 
@@ -188,6 +200,9 @@ class MusicBrainzReleaseDetails(BaseModel):
     barcode: str | None = Field(default=None, description="Barcode")
     artist_credit: list[MusicBrainzArtistCredit] = Field(
         default_factory=list, alias="artist-credit", description="Artist credits"
+    )
+    release_group: MusicBrainzReleaseGroup | None = Field(
+        default=None, alias="release-group", description="Parent release group"
     )
 
     @property
