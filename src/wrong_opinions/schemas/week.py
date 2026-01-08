@@ -79,8 +79,8 @@ class WeekResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(description="Week ID")
-    user_id: int = Field(description="Owner user ID")
-    owner: WeekOwner | None = Field(default=None, description="Owner information")
+    user_id: int | None = Field(default=None, description="Owner user ID (null if unclaimed)")
+    owner: WeekOwner | None = Field(default=None, description="Owner information (null if unclaimed)")
     year: int = Field(description="Year")
     week_number: int = Field(description="ISO week number (1-53)")
     notes: str | None = Field(default=None, description="Optional notes/commentary")

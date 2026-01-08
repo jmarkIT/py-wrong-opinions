@@ -246,9 +246,9 @@ async def get_current_week(
     week = result.scalar_one_or_none()
 
     if not week:
-        # Create new week for current period with current user as owner
+        # Create new unclaimed week for current period
         week = Week(
-            user_id=current_user.id,
+            user_id=None,  # Unclaimed - will be claimed when first selection is added
             year=current_year,
             week_number=current_week,
             notes=None,
@@ -324,6 +324,8 @@ async def update_week(
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
 
+    if week.user_id is None:
+        raise HTTPException(status_code=403, detail="Cannot modify an unclaimed week")
     if week.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 
@@ -357,6 +359,8 @@ async def delete_week(
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
 
+    if week.user_id is None:
+        raise HTTPException(status_code=403, detail="Cannot delete an unclaimed week")
     if week.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the owner can delete this week")
 
@@ -386,7 +390,11 @@ async def add_movie_to_week(
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
 
-    if week.user_id != current_user.id:
+    # Check ownership: if unclaimed, claim it; if owned by someone else, reject
+    if week.user_id is None:
+        # Claim the unclaimed week
+        week.user_id = current_user.id
+    elif week.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 
     # Check if position is already occupied
@@ -483,6 +491,8 @@ async def remove_movie_from_week(
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
 
+    if week.user_id is None:
+        raise HTTPException(status_code=403, detail="Cannot modify an unclaimed week")
     if week.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 
@@ -525,7 +535,11 @@ async def add_album_to_week(
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
 
-    if week.user_id != current_user.id:
+    # Check ownership: if unclaimed, claim it; if owned by someone else, reject
+    if week.user_id is None:
+        # Claim the unclaimed week
+        week.user_id = current_user.id
+    elif week.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 
     # Check if position is already occupied
@@ -657,6 +671,8 @@ async def remove_album_from_week(
     if not week:
         raise HTTPException(status_code=404, detail="Week not found")
 
+    if week.user_id is None:
+        raise HTTPException(status_code=403, detail="Cannot modify an unclaimed week")
     if week.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the owner can modify this week")
 

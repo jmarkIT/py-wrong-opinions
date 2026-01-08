@@ -23,7 +23,9 @@ class Week(Base):
     __table_args__ = (UniqueConstraint("year", "week_number", name="uq_year_week"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     year: Mapped[int] = mapped_column(index=True)
     week_number: Mapped[int] = mapped_column()  # ISO week number (1-53)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -31,7 +33,7 @@ class Week(Base):
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    user: Mapped[User] = relationship(back_populates="weeks")
+    user: Mapped[User | None] = relationship(back_populates="weeks")
     week_movies: Mapped[list[WeekMovie]] = relationship(
         back_populates="week", cascade="all, delete-orphan"
     )
