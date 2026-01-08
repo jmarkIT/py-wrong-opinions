@@ -672,6 +672,8 @@ GET /api/albums/selections?page=1&page_size=20
 
 All week endpoints require authentication. Weeks are globally unique per calendar week (year + week_number), meaning only one selection can exist per week across all users. Any authenticated user can view all weeks, but only the owner can modify their week's selections.
 
+**Unclaimed Weeks:** When a week is created via `GET /api/weeks/current`, it starts as "unclaimed" (`user_id: null`). The first user to add a movie or album to an unclaimed week becomes the owner. Unclaimed weeks cannot be updated, deleted, or have items removed from them.
+
 ### List Weeks
 
 #### `GET /api/weeks`
@@ -788,57 +790,27 @@ Get the week for the current ISO week, or create it if it doesn't exist.
 ```json
 {
   "id": 124,
-  "user_id": 1,
+  "user_id": null,
   "year": 2025,
   "week_number": 52,
   "notes": null,
   "created_at": "2025-12-28T16:00:00Z",
   "updated_at": "2025-12-28T16:00:00Z",
-  "owner": {
-    "id": 1,
-    "username": "johndoe"
-  },
-  "movies": [
-    {
-      "position": 1,
-      "added_at": "2025-12-28T16:05:00Z",
-      "movie": {
-        "id": 42,
-        "tmdb_id": 27205,
-        "title": "Inception",
-        "original_title": "Inception",
-        "release_date": "2010-07-16",
-        "poster_path": "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg",
-        "overview": "Cobb, a skilled thief...",
-        "cached_at": "2025-12-28T16:05:00Z"
-      }
-    }
-  ],
-  "albums": [
-    {
-      "position": 1,
-      "added_at": "2025-12-28T16:10:00Z",
-      "album": {
-        "id": 15,
-        "musicbrainz_id": "3f49f47e-0e67-4f90-a3c0-df47c9b4b8c9",
-        "title": "The Dark Side of the Moon",
-        "artist": "Pink Floyd",
-        "release_date": "1973-03-01",
-        "cover_art_url": "https://coverartarchive.org/release/...",
-        "cached_at": "2025-12-28T16:10:00Z"
-      }
-    }
-  ]
+  "owner": null,
+  "movies": [],
+  "albums": []
 }
 ```
 
 **Notes:**
 - If a week for the current ISO week already exists (created by any user), returns that week
 - Only creates a new week if no week exists for the current ISO week
+- **Newly created weeks are unclaimed** (`user_id: null`, `owner: null`)
 - Returns the week with all associated movies and albums
 - Useful for "This Week" views in the UI
 - `movies` and `albums` arrays can be empty if nothing has been added yet
-- If the returned week was created by another user, you cannot modify it (403 Forbidden)
+- If the returned week is owned by another user, you cannot modify it (403 Forbidden)
+- **To claim an unclaimed week**, add a movie or album to it
 
 ---
 
@@ -1027,7 +999,8 @@ Add a movie to a week selection. Only the owner can add movies to a week.
 - `position`: Must be 1 or 2
 - Position must not already be occupied
 - Movie will be fetched from TMDB if not in local cache
-- Only the owner of the week can perform this operation
+- **If the week is unclaimed**, the current user becomes the owner
+- If the week is already owned by someone else, returns 403 Forbidden
 
 **Response:** `201 Created`
 
@@ -1108,7 +1081,8 @@ Add an album to a week selection. Only the owner can add albums to a week.
 - `position`: Must be 1 or 2
 - Position must not already be occupied
 - Album will be fetched from MusicBrainz if not in local cache
-- Only the owner of the week can perform this operation
+- **If the week is unclaimed**, the current user becomes the owner
+- If the week is already owned by someone else, returns 403 Forbidden
 
 **Response:** `201 Created`
 
@@ -1374,13 +1348,13 @@ Remove an album from a week selection. Only the owner can remove albums from a w
 ```typescript
 {
   id: number
-  user_id: number
+  user_id: number | null  // null if unclaimed
   year: number
   week_number: number  // 1-53 (ISO week)
   notes: string | null
   created_at: string  // ISO 8601 datetime
   updated_at: string  // ISO 8601 datetime
-  owner: WeekOwner | null  // Who created this week
+  owner: WeekOwner | null  // null if unclaimed
 }
 ```
 
@@ -1389,13 +1363,13 @@ Remove an album from a week selection. Only the owner can remove albums from a w
 ```typescript
 {
   id: number
-  user_id: number
+  user_id: number | null  // null if unclaimed
   year: number
   week_number: number
   notes: string | null
   created_at: string
   updated_at: string
-  owner: WeekOwner | null  // Who created this week
+  owner: WeekOwner | null  // null if unclaimed
   movies: [
     {
       position: number  // 1 or 2
@@ -1507,9 +1481,12 @@ Each week can have:
 - **0-2 movies** (positions 1 and 2)
 - **0-2 albums** (positions 1 and 2)
 - Only ONE week can exist per year+week_number combination globally (across all users)
-- The `user_id` indicates who owns the week and can modify it
+- Weeks created via `/api/weeks/current` start as **unclaimed** (`user_id: null`)
+- The first user to add a movie or album to an unclaimed week **claims** it
+- The `user_id` indicates who owns the week and can modify it (null = unclaimed)
 - Any authenticated user can view all weeks
 - Only the owner can add/remove movies/albums, update notes, or delete the week
+- Unclaimed weeks cannot be modified, deleted, or have items removed
 
 ### Auto-generated Documentation
 

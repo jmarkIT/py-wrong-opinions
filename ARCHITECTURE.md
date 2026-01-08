@@ -102,7 +102,7 @@ Represents a weekly selection period. Weeks are globally unique per calendar wee
 ```python
 class Week:
     id: int (PK)
-    user_id: int (FK -> User)  # Owner - only this user can modify the week
+    user_id: int | None (FK -> User)  # Owner - None if unclaimed
     year: int
     week_number: int  # ISO week number (1-53)
     notes: str | None  # Optional commentary
@@ -110,7 +110,9 @@ class Week:
     updated_at: datetime
 
     # Constraints: unique(year, week_number) - globally unique per calendar week
-    # Note: user_id indicates ownership, not access control
+    # Note: user_id indicates ownership (None = unclaimed)
+    # Weeks created via /api/weeks/current start as unclaimed
+    # First user to add a movie/album claims the week
     # Any authenticated user can view all weeks
 ```
 
@@ -467,6 +469,9 @@ uv run alembic upgrade head
 ### Shared data model
 - All endpoints (except register/login) require authentication
 - Weeks are globally unique per calendar week - only one selection per week
+- Weeks created via `/api/weeks/current` start as unclaimed (`user_id=None`)
+- First user to add a movie/album to an unclaimed week claims ownership
 - All authenticated users can view all data (weeks, movies, albums)
 - Only the owner of a week can modify it (add/remove selections, update notes, delete)
+- Unclaimed weeks cannot be modified, deleted, or have items removed
 - Movie and album cache is shared globally between all users

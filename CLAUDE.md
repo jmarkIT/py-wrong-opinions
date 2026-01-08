@@ -429,7 +429,9 @@ See `ARCHITECTURE.md` for complete details. All models have been implemented:
 
 ### Important Constraints
 - Weeks are globally unique per calendar week (year + week_number) - only one selection can exist per week across all users
-- The user who creates a week owns it (user_id field) and is the only one who can modify it
+- Weeks start as "unclaimed" (user_id=None) when created via `/api/weeks/current`
+- The first user to add a movie or album to an unclaimed week becomes the owner
+- Only the owner (user_id field) can modify a week's selections
 - Any authenticated user can view all weeks
 - Each week can have 1-2 movies (position 1 or 2)
 - Each week can have 1-2 albums (position 1 or 2)
@@ -628,5 +630,5 @@ uv run fastapi dev src/wrong_opinions/main.py
 
 ---
 
-**Last Updated**: 2026-01-03
+**Last Updated**: 2026-01-07
 **For Questions**: Refer to ARCHITECTURE.md for detailed specifications
