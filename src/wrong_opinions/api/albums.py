@@ -199,7 +199,7 @@ async def get_album(
     # Fetch from MusicBrainz
     # APIError exceptions (except NotFoundError) are handled globally
     try:
-        release = await musicbrainz_client.get_release(musicbrainz_id)
+        release = await musicbrainz_client.get_release(musicbrainz_id, include_artist_credits=True)
 
         # Get release-group ID for cover art fallback
         release_group_id = release.release_group.id if release.release_group else None
